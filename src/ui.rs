@@ -9,7 +9,6 @@ use ratatui::{
 use crate::app::App;
 use crate::cli::{Mode, Preset, PRESETS};
 
-const MAX_LINE_WIDTH: usize = 120;
 
 pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
     let area = f.area();
@@ -84,8 +83,8 @@ fn draw_preset_bar(f: &mut Frame, preset_idx: usize, started: bool, area: Rect) 
 fn draw_body(f: &mut Frame, app: &App, area: Rect) {
     let inner_width = area.width.saturating_sub(4) as usize;
     let inner_height = area.height.saturating_sub(2) as usize;
-    let line_width = inner_width.min(MAX_LINE_WIDTH).max(20);
-    let visible_lines = (((inner_height + 1) / 2).max(3)).min(7);
+    let line_width = inner_width.max(20);
+    let visible_lines = ((inner_height + 1) / 2).max(3);
 
     let lines = wrap_lines(&app.target, line_width);
     let cursor = app.typed.len();
@@ -96,13 +95,7 @@ fn draw_body(f: &mut Frame, app: &App, area: Rect) {
     let end = (start + visible_lines).min(lines.len());
     let visible = &lines[start..end];
 
-    let used = visible.len() * 2 - 1;
-    let top_pad = inner_height.saturating_sub(used) / 2;
-
-    let mut rendered: Vec<Line> = Vec::with_capacity(top_pad + visible.len() * 2);
-    for _ in 0..top_pad {
-        rendered.push(Line::raw(""));
-    }
+    let mut rendered: Vec<Line> = Vec::with_capacity(visible.len() * 2);
     for (i, (s, e)) in visible.iter().enumerate() {
         let is_current = start + i == current_line;
         rendered.push(line_for_range(app, *s, *e, is_current, line_width));
