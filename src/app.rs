@@ -13,6 +13,7 @@ pub struct App {
     pub incorrect: usize,
     pub start: Option<Instant>,
     pub finished: bool,
+    pub end_elapsed: Option<f64>,
     pub mode: Mode,
     pub amount: u32,
     pub target_words: usize,
@@ -37,6 +38,7 @@ impl App {
             incorrect: 0,
             start: None,
             finished: false,
+            end_elapsed: None,
             mode,
             amount,
             target_words: count,
@@ -44,7 +46,26 @@ impl App {
     }
 
     pub fn elapsed(&self) -> f64 {
+        if let Some(e) = self.end_elapsed {
+            return e;
+        }
         self.start.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0)
+    }
+
+    fn finish(&mut self) {
+        if self.finished {
+            return;
+        }
+        let live = self
+            .start
+            .map(|s| s.elapsed().as_secs_f64())
+            .unwrap_or(0.0);
+        let frozen = match self.mode {
+            Mode::Time => live.min(self.amount as f64),
+            Mode::Words => live,
+        };
+        self.end_elapsed = Some(frozen);
+        self.finished = true;
     }
 
     pub fn time_left(&self) -> f64 {
@@ -128,12 +149,12 @@ impl App {
         match self.mode {
             Mode::Time => {
                 if self.elapsed() >= self.amount as f64 {
-                    self.finished = true;
+                    self.finish();
                 }
             }
             Mode::Words => {
                 if self.words_done() >= self.target_words {
-                    self.finished = true;
+                    self.finish();
                 }
             }
         }
