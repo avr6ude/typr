@@ -5,7 +5,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::Terminal;
 
 use crate::app::App;
-use crate::cli::{preset_index, PRESETS};
+use crate::cli::{preset_index, Mode, PRESETS};
 use crate::ui::draw;
 
 pub fn event_loop<B: ratatui::backend::Backend>(
@@ -14,7 +14,7 @@ pub fn event_loop<B: ratatui::backend::Backend>(
 ) -> io::Result<()> {
     let tick = Duration::from_millis(100);
     let mut last_tick = Instant::now();
-    let mut preset_idx = preset_index(app.mode, app.amount);
+    let mut preset_idx = preset_index(app.mode, app.amount, app.lang);
 
     loop {
         terminal.draw(|f| draw(f, app, preset_idx))?;
@@ -37,22 +37,24 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                         if can_cycle {
                             preset_idx = (preset_idx + 1) % PRESETS.len();
                         } else {
-                            preset_idx = preset_index(app.mode, app.amount);
+                            preset_idx = preset_index(app.mode, app.amount, app.lang);
                         }
                         let p = PRESETS[preset_idx];
-                        *app = App::new(p.mode, p.amount);
+                        *app = App::new(p.mode, p.amount, p.lang);
                     }
                     KeyCode::BackTab => {
                         if can_cycle {
                             preset_idx = (preset_idx + PRESETS.len() - 1) % PRESETS.len();
                             let p = PRESETS[preset_idx];
-                            *app = App::new(p.mode, p.amount);
+                            *app = App::new(p.mode, p.amount, p.lang);
                         }
                     }
                     KeyCode::Enter => {
                         if app.finished {
                             let p = PRESETS[preset_idx];
-                            *app = App::new(p.mode, p.amount);
+                            *app = App::new(p.mode, p.amount, p.lang);
+                        } else if matches!(app.mode, Mode::Code) {
+                            app.push('\n');
                         }
                     }
                     KeyCode::Backspace => {

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::cli::{Mode, Preset, PRESETS};
+use crate::cli::{lang_label, Mode, Preset, PRESETS};
 
 const VISIBLE_LINES: usize = 3;
 const SIDEBAR_WIDTH: u16 = 22;
@@ -105,6 +105,14 @@ fn draw_stats(f: &mut Frame, app: &App, area: Rect) {
                 format!("{}/{}", app.words_done(), app.target_words),
                 Color::Cyan,
             ),
+            Mode::Code => (
+                "lang",
+                app.lang
+                    .map(lang_label)
+                    .unwrap_or("plain")
+                    .to_string(),
+                Color::Cyan,
+            ),
         },
         ("wpm", format!("{:.1}", app.wpm()), Color::Green),
         ("raw", format!("{:.1}", app.raw_wpm()), Color::Gray),
@@ -143,18 +151,32 @@ fn draw_stats(f: &mut Frame, app: &App, area: Rect) {
 fn draw_typing(f: &mut Frame, app: &App, area: Rect) {
     let inner_w = area.width.saturating_sub(4) as usize;
     let inner_h = area.height as usize;
+    let is_code = matches!(app.mode, Mode::Code);
     let line_width = inner_w.max(20);
 
     let lines = wrap_lines(&app.target, line_width);
     let cursor = app.typed.len();
     let current = find_line(&lines, cursor);
 
-    let half = VISIBLE_LINES / 2;
-    let start = current.saturating_sub(half);
-    let end = (start + VISIBLE_LINES).min(lines.len());
+    let (start, end, alignment) = if is_code {
+        let visible_h = inner_h.max(3);
+        let half = visible_h / 2;
+        let s = current.saturating_sub(half);
+        let e = (s + visible_h).min(lines.len());
+        (s, e, Alignment::Left)
+    } else {
+        let half = VISIBLE_LINES / 2;
+        let s = current.saturating_sub(half);
+        let e = (s + VISIBLE_LINES).min(lines.len());
+        (s, e, Alignment::Center)
+    };
     let visible = &lines[start..end];
 
-    let used = visible.len() * 2 - 1;
+    let used = if is_code {
+        visible.len()
+    } else {
+        visible.len() * 2 - 1
+    };
     let top_pad = inner_h.saturating_sub(used) / 2;
 
     let mut rendered: Vec<Line> = Vec::with_capacity(top_pad + visible.len() * 2);
@@ -164,7 +186,7 @@ fn draw_typing(f: &mut Frame, app: &App, area: Rect) {
     for (i, (s, e)) in visible.iter().enumerate() {
         let is_current = start + i == current;
         rendered.push(line_for_range(app, *s, *e, is_current, line_width));
-        if i + 1 < visible.len() {
+        if !is_code && i + 1 < visible.len() {
             rendered.push(Line::raw(""));
         }
     }
@@ -175,7 +197,7 @@ fn draw_typing(f: &mut Frame, app: &App, area: Rect) {
         width: area.width.saturating_sub(4),
         height: area.height,
     };
-    f.render_widget(Paragraph::new(rendered).alignment(Alignment::Center), inner);
+    f.render_widget(Paragraph::new(rendered).alignment(alignment), inner);
 }
 
 fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
@@ -270,10 +292,12 @@ fn draw_results(f: &mut Frame, app: &App) {
             match app.mode {
                 Mode::Time => "time",
                 Mode::Words => "words",
+                Mode::Code => "lang",
             },
             match app.mode {
                 Mode::Time => format!("{:.1}s", app.elapsed()),
                 Mode::Words => format!("{}/{}", app.words_done(), app.target_words),
+                Mode::Code => app.lang.map(lang_label).unwrap_or("plain").to_string(),
             },
             Color::Cyan,
         ),
@@ -368,6 +392,7 @@ fn preset_label(p: &Preset) -> String {
     match p.mode {
         Mode::Time => format!("time {}s", p.amount),
         Mode::Words => format!("words {}", p.amount),
+        Mode::Code => format!("code {}", lang_label(p.lang.unwrap())),
     }
 }
 
@@ -377,15 +402,19 @@ pub fn wrap_lines(target: &[char], width: usize) -> Vec<(usize, usize)> {
     let mut start = 0;
     while start < len {
         let hard_end = (start + width).min(len);
-        let mut end = hard_end;
-        if end < len {
-            if let Some(rel) = target[start..end].iter().rposition(|c| *c == ' ') {
-                end = start + rel + 1;
+        let newline = target[start..hard_end].iter().position(|c| *c == '\n');
+        let end = if let Some(p) = newline {
+            start + p + 1
+        } else if hard_end < len {
+            if let Some(p) = target[start..hard_end].iter().rposition(|c| *c == ' ') {
+                start + p + 1
+            } else {
+                hard_end
             }
-        }
-        if end == start {
-            end = hard_end;
-        }
+        } else {
+            hard_end
+        };
+        let end = if end == start { hard_end.max(start + 1) } else { end };
         lines.push((start, end));
         start = end;
     }
@@ -414,14 +443,20 @@ fn line_for_range(
     is_current: bool,
     width: usize,
 ) -> Line<'static> {
+    let is_code = matches!(app.mode, Mode::Code);
     let mut spans: Vec<Span> = Vec::with_capacity(end - start);
-    let pad = width.saturating_sub(end - start);
+    let mut visible = 0usize;
     for i in start..end {
         let ch = app.target[i];
         let typed = app.typed.get(i).copied();
+        let syntax_color = app.colors.get(i).copied().unwrap_or(Color::Gray);
         let mut style = if let Some(t) = typed {
             if t == ch {
-                Style::default().fg(Color::Green)
+                if is_code {
+                    Style::default().fg(syntax_color)
+                } else {
+                    Style::default().fg(Color::Green)
+                }
             } else {
                 Style::default().fg(Color::Red).add_modifier(Modifier::UNDERLINED)
             }
@@ -430,21 +465,27 @@ fn line_for_range(
                 .fg(Color::Black)
                 .bg(Color::White)
                 .add_modifier(Modifier::BOLD)
+        } else if is_code {
+            Style::default().fg(syntax_color).add_modifier(Modifier::DIM)
         } else if is_current {
             Style::default().fg(Color::Gray)
         } else {
             Style::default().fg(Color::DarkGray)
         };
-        if is_current {
+        if is_current && !is_code {
             style = style.add_modifier(Modifier::BOLD);
         }
-        let display = if ch == ' ' && typed.is_some() && typed != Some(ch) {
+        let display = if ch == '\n' {
+            '↵'
+        } else if ch == ' ' && typed.is_some() && typed != Some(ch) {
             '_'
         } else {
             ch
         };
         spans.push(Span::styled(display.to_string(), style));
+        visible += 1;
     }
+    let pad = width.saturating_sub(visible);
     if pad > 0 {
         spans.push(Span::raw(" ".repeat(pad)));
     }

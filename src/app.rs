@@ -1,14 +1,17 @@
 use std::time::Instant;
 
 use rand::seq::SliceRandom;
+use ratatui::style::Color;
 
-use crate::cli::Mode;
+use crate::cli::{Lang, Mode};
+use crate::code;
 
 const WORDS: &str = include_str!("words.txt");
 
 pub struct App {
     pub target: Vec<char>,
     pub typed: Vec<char>,
+    pub colors: Vec<Color>,
     pub correct: usize,
     pub incorrect: usize,
     pub start: Option<Instant>,
@@ -16,24 +19,39 @@ pub struct App {
     pub end_elapsed: Option<f64>,
     pub mode: Mode,
     pub amount: u32,
+    pub lang: Option<Lang>,
     pub target_words: usize,
 }
 
 impl App {
-    pub fn new(mode: Mode, amount: u32) -> Self {
-        let pool: Vec<&str> = WORDS.split_whitespace().collect();
-        let mut rng = rand::thread_rng();
-        let count = match mode {
-            Mode::Time => 500,
-            Mode::Words => amount as usize,
+    pub fn new(mode: Mode, amount: u32, lang: Option<Lang>) -> Self {
+        let (target_str, colors, target_words) = match mode {
+            Mode::Code => {
+                let l = lang.unwrap_or(Lang::Rust);
+                let s = code::pick_sample(l);
+                let colors = code::highlight(s, l);
+                (s.to_string(), colors, s.split_whitespace().count())
+            }
+            Mode::Time | Mode::Words => {
+                let pool: Vec<&str> = WORDS.split_whitespace().collect();
+                let mut rng = rand::thread_rng();
+                let count = match mode {
+                    Mode::Time => 500,
+                    _ => amount as usize,
+                };
+                let picked: Vec<String> = (0..count)
+                    .map(|_| pool.choose(&mut rng).unwrap().to_string())
+                    .collect();
+                let s = picked.join(" ");
+                let len = s.chars().count();
+                (s, vec![Color::Gray; len], count)
+            }
         };
-        let picked: Vec<String> = (0..count)
-            .map(|_| pool.choose(&mut rng).unwrap().to_string())
-            .collect();
-        let target: Vec<char> = picked.join(" ").chars().collect();
+        let target: Vec<char> = target_str.chars().collect();
         Self {
             target,
             typed: Vec::new(),
+            colors,
             correct: 0,
             incorrect: 0,
             start: None,
@@ -41,7 +59,8 @@ impl App {
             end_elapsed: None,
             mode,
             amount,
-            target_words: count,
+            lang,
+            target_words,
         }
     }
 
@@ -62,7 +81,7 @@ impl App {
             .unwrap_or(0.0);
         let frozen = match self.mode {
             Mode::Time => live.min(self.amount as f64),
-            Mode::Words => live,
+            _ => live,
         };
         self.end_elapsed = Some(frozen);
         self.finished = true;
@@ -71,7 +90,7 @@ impl App {
     pub fn time_left(&self) -> f64 {
         match self.mode {
             Mode::Time => (self.amount as f64 - self.elapsed()).max(0.0),
-            Mode::Words => 0.0,
+            _ => 0.0,
         }
     }
 
@@ -157,6 +176,11 @@ impl App {
                     self.finish();
                 }
             }
+            Mode::Code => {
+                if self.typed.len() >= self.target.len() {
+                    self.finish();
+                }
+            }
         }
     }
 
@@ -165,7 +189,7 @@ impl App {
             && self.start.is_some()
             && self.elapsed() >= self.amount as f64
         {
-            self.finished = true;
+            self.finish();
         }
     }
 }

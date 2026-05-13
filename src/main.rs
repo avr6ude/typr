@@ -1,5 +1,6 @@
 mod app;
 mod cli;
+mod code;
 mod event_loop;
 mod ui;
 
@@ -19,7 +20,7 @@ use crate::event_loop::event_loop;
 
 fn run() -> io::Result<()> {
     let cli = Cli::parse();
-    let mut app = App::new(cli.mode, cli.amount);
+    let mut app = App::new(cli.mode, cli.amount, cli.lang);
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
