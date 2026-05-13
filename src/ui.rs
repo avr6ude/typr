@@ -11,6 +11,7 @@ use crate::cli::{Mode, Preset, PRESETS};
 
 const LINE_WIDTH: usize = 56;
 const VISIBLE_LINES: usize = 3;
+const BODY_HEIGHT: u16 = (VISIBLE_LINES as u16) * 2 + 1;
 
 pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
     let area = f.area();
@@ -18,17 +19,19 @@ pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
+            Constraint::Min(0),
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Min(7),
+            Constraint::Length(BODY_HEIGHT),
             Constraint::Length(3),
+            Constraint::Min(0),
         ])
         .split(area);
 
-    draw_header(f, app, chunks[0]);
-    draw_preset_bar(f, preset_idx, app.start.is_some(), chunks[1]);
-    draw_body(f, app, chunks[2]);
-    draw_footer(f, app, chunks[3]);
+    draw_header(f, app, chunks[1]);
+    draw_preset_bar(f, preset_idx, app.start.is_some(), chunks[2]);
+    draw_body(f, app, chunks[3]);
+    draw_footer(f, app, chunks[4]);
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
@@ -94,18 +97,13 @@ fn draw_body(f: &mut Frame, app: &App, area: Rect) {
     let end = (start + VISIBLE_LINES).min(lines.len());
     let visible = &lines[start..end];
 
-    let body_height = area.height.saturating_sub(2) as usize;
-    let used_lines = visible.len() * 2 + visible.len().saturating_sub(1);
-    let top_pad = body_height.saturating_sub(used_lines) / 2;
-
-    let mut rendered: Vec<Line> = Vec::with_capacity(top_pad + visible.len() * 3);
-    for _ in 0..top_pad {
-        rendered.push(Line::raw(""));
-    }
+    let mut rendered: Vec<Line> = Vec::with_capacity(visible.len() * 2);
     for (i, (s, e)) in visible.iter().enumerate() {
         let is_current = start + i == current_line;
         rendered.push(line_for_range(app, *s, *e, is_current, line_width));
-        rendered.push(Line::raw(""));
+        if i + 1 < visible.len() {
+            rendered.push(Line::raw(""));
+        }
     }
 
     let p = Paragraph::new(rendered)
