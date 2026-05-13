@@ -1,0 +1,15 @@
+[package]
+name = "typr"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ratatui = "0.28"
+crossterm = "0.28"
+rand = "0.8"
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
