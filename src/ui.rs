@@ -83,7 +83,9 @@ fn draw_mode_bar(f: &mut Frame, app: &App, area: Rect) {
             row_src.push(sep.clone());
         }
     }
-    let hint = if started {
+    let hint = if started && is_code {
+        "    tab indent"
+    } else if started {
         "    tab restart"
     } else if is_code {
         "    ↑↓ source · ←→ lang · tab limit"

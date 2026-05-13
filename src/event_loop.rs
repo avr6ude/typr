@@ -38,8 +38,19 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                         if can_cycle {
                             let limits = limits_for(app.source);
                             app.limit = next_in(limits, app.limit);
+                            *app = App::new(app.source, app.limit, app.lang);
+                        } else if app.is_code() {
+                            while app.typed.len() < app.target.len() {
+                                let next = app.target[app.typed.len()];
+                                if next == ' ' || next == '\t' {
+                                    app.push(next);
+                                } else {
+                                    break;
+                                }
+                            }
+                        } else {
+                            *app = App::new(app.source, app.limit, app.lang);
                         }
-                        *app = App::new(app.source, app.limit, app.lang);
                     }
                     KeyCode::BackTab => {
                         if can_cycle {
