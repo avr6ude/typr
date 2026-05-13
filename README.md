@@ -50,6 +50,17 @@ Output: `target/aarch64-unknown-linux-musl/release/typr` — static, runs on any
 cargo build --release
 ```
 
+## Release via GitHub Actions
+
+Push a tag matching `v*` and `.github/workflows/release.yml` builds all three targets and attaches binaries to a GitHub Release.
+
+```
+git tag v0.1.0
+git push --tags
+```
+
+Trigger manually from the Actions tab via `workflow_dispatch` to just produce build artifacts without a release.
+
 ## Deploy
 
 ```
