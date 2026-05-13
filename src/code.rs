@@ -31,15 +31,32 @@ const GO: &[&str] = &[
     "type Stack struct {\n    data []int\n}\n\nfunc (s *Stack) Push(v int) {\n    s.data = append(s.data, v)\n}",
 ];
 
-pub fn pick_sample(lang: Lang) -> &'static str {
-    let mut rng = rand::thread_rng();
-    let pool = match lang {
+fn pool(lang: Lang) -> &'static [&'static str] {
+    match lang {
         Lang::Rust => RUST,
         Lang::Python => PYTHON,
         Lang::Js => JS,
         Lang::Go => GO,
-    };
-    pool.choose(&mut rng).copied().unwrap()
+    }
+}
+
+pub fn pick_sample(lang: Lang) -> &'static str {
+    let mut rng = rand::thread_rng();
+    pool(lang).choose(&mut rng).copied().unwrap()
+}
+
+pub fn long_sample(lang: Lang, target_chars: usize) -> String {
+    let mut rng = rand::thread_rng();
+    let p = pool(lang);
+    let mut out = String::new();
+    while out.chars().count() < target_chars {
+        let s = p.choose(&mut rng).copied().unwrap();
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(s);
+    }
+    out
 }
 
 pub fn highlight(text: &str, lang: Lang) -> Vec<Color> {

@@ -3,7 +3,7 @@ use std::time::Instant;
 use rand::seq::SliceRandom;
 use ratatui::style::Color;
 
-use crate::cli::{Lang, Mode};
+use crate::cli::{Lang, Limit, Source};
 use crate::code;
 
 const WORDS: &str = include_str!("words.txt");
@@ -17,27 +17,30 @@ pub struct App {
     pub start: Option<Instant>,
     pub finished: bool,
     pub end_elapsed: Option<f64>,
-    pub mode: Mode,
-    pub amount: u32,
-    pub lang: Option<Lang>,
+    pub source: Source,
+    pub limit: Limit,
+    pub lang: Lang,
     pub target_words: usize,
 }
 
 impl App {
-    pub fn new(mode: Mode, amount: u32, lang: Option<Lang>) -> Self {
-        let (target_str, colors, target_words) = match mode {
-            Mode::Code => {
-                let l = lang.unwrap_or(Lang::Rust);
-                let s = code::pick_sample(l);
-                let colors = code::highlight(s, l);
-                (s.to_string(), colors, s.split_whitespace().count())
+    pub fn new(source: Source, limit: Limit, lang: Lang) -> Self {
+        let (target_str, colors, target_words) = match source {
+            Source::Code => {
+                let s = match limit {
+                    Limit::Snippet => code::pick_sample(lang).to_string(),
+                    Limit::Time(_) | Limit::Count(_) => code::long_sample(lang, 2000),
+                };
+                let colors = code::highlight(&s, lang);
+                let w = s.split_whitespace().count();
+                (s, colors, w)
             }
-            Mode::Time | Mode::Words => {
+            Source::Text => {
                 let pool: Vec<&str> = WORDS.split_whitespace().collect();
                 let mut rng = rand::thread_rng();
-                let count = match mode {
-                    Mode::Time => 500,
-                    _ => amount as usize,
+                let count = match limit {
+                    Limit::Count(n) => n as usize,
+                    _ => 500,
                 };
                 let picked: Vec<String> = (0..count)
                     .map(|_| pool.choose(&mut rng).unwrap().to_string())
@@ -57,8 +60,8 @@ impl App {
             start: None,
             finished: false,
             end_elapsed: None,
-            mode,
-            amount,
+            source,
+            limit,
             lang,
             target_words,
         }
@@ -79,8 +82,8 @@ impl App {
             .start
             .map(|s| s.elapsed().as_secs_f64())
             .unwrap_or(0.0);
-        let frozen = match self.mode {
-            Mode::Time => live.min(self.amount as f64),
+        let frozen = match self.limit {
+            Limit::Time(n) => live.min(n as f64),
             _ => live,
         };
         self.end_elapsed = Some(frozen);
@@ -88,8 +91,8 @@ impl App {
     }
 
     pub fn time_left(&self) -> f64 {
-        match self.mode {
-            Mode::Time => (self.amount as f64 - self.elapsed()).max(0.0),
+        match self.limit {
+            Limit::Time(n) => (n as f64 - self.elapsed()).max(0.0),
             _ => 0.0,
         }
     }
@@ -165,18 +168,18 @@ impl App {
     }
 
     pub fn check_done(&mut self) {
-        match self.mode {
-            Mode::Time => {
-                if self.elapsed() >= self.amount as f64 {
+        match self.limit {
+            Limit::Time(n) => {
+                if self.elapsed() >= n as f64 {
                     self.finish();
                 }
             }
-            Mode::Words => {
+            Limit::Count(_) => {
                 if self.words_done() >= self.target_words {
                     self.finish();
                 }
             }
-            Mode::Code => {
+            Limit::Snippet => {
                 if self.typed.len() >= self.target.len() {
                     self.finish();
                 }
@@ -185,11 +188,14 @@ impl App {
     }
 
     pub fn tick(&mut self) {
-        if matches!(self.mode, Mode::Time)
-            && self.start.is_some()
-            && self.elapsed() >= self.amount as f64
-        {
-            self.finish();
+        if let Limit::Time(n) = self.limit {
+            if self.start.is_some() && self.elapsed() >= n as f64 {
+                self.finish();
+            }
         }
+    }
+
+    pub fn is_code(&self) -> bool {
+        matches!(self.source, Source::Code)
     }
 }

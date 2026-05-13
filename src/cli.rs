@@ -1,9 +1,8 @@
 use clap::{Parser, ValueEnum};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-pub enum Mode {
-    Time,
-    Words,
+pub enum Source {
+    Text,
     Code,
 }
 
@@ -15,46 +14,57 @@ pub enum Lang {
     Go,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Limit {
+    Time(u32),
+    Count(u32),
+    Snippet,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "typr", about = "CLI typing test")]
 pub struct Cli {
-    #[arg(short, long, value_enum, default_value_t = Mode::Time)]
-    pub mode: Mode,
+    #[arg(short, long, value_enum, default_value_t = Source::Text)]
+    pub source: Source,
 
-    #[arg(short, long, default_value_t = 30)]
-    pub amount: u32,
-
-    #[arg(short, long, value_enum)]
-    pub lang: Option<Lang>,
+    #[arg(short, long, value_enum, default_value_t = Lang::Rust)]
+    pub lang: Lang,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Preset {
-    pub mode: Mode,
-    pub amount: u32,
-    pub lang: Option<Lang>,
-}
+pub const SOURCES: &[Source] = &[Source::Text, Source::Code];
+pub const LANGS: &[Lang] = &[Lang::Rust, Lang::Python, Lang::Js, Lang::Go];
 
-pub const PRESETS: &[Preset] = &[
-    Preset { mode: Mode::Time, amount: 15, lang: None },
-    Preset { mode: Mode::Time, amount: 30, lang: None },
-    Preset { mode: Mode::Time, amount: 60, lang: None },
-    Preset { mode: Mode::Time, amount: 120, lang: None },
-    Preset { mode: Mode::Words, amount: 10, lang: None },
-    Preset { mode: Mode::Words, amount: 25, lang: None },
-    Preset { mode: Mode::Words, amount: 50, lang: None },
-    Preset { mode: Mode::Words, amount: 100, lang: None },
-    Preset { mode: Mode::Code, amount: 0, lang: Some(Lang::Rust) },
-    Preset { mode: Mode::Code, amount: 0, lang: Some(Lang::Python) },
-    Preset { mode: Mode::Code, amount: 0, lang: Some(Lang::Js) },
-    Preset { mode: Mode::Code, amount: 0, lang: Some(Lang::Go) },
+pub const LIMITS_TEXT: &[Limit] = &[
+    Limit::Time(15),
+    Limit::Time(30),
+    Limit::Time(60),
+    Limit::Time(120),
+    Limit::Count(10),
+    Limit::Count(25),
+    Limit::Count(50),
+    Limit::Count(100),
 ];
 
-pub fn preset_index(mode: Mode, amount: u32, lang: Option<Lang>) -> usize {
-    PRESETS
-        .iter()
-        .position(|p| p.mode == mode && p.amount == amount && p.lang == lang)
-        .unwrap_or(1)
+pub const LIMITS_CODE: &[Limit] = &[
+    Limit::Time(15),
+    Limit::Time(30),
+    Limit::Time(60),
+    Limit::Time(120),
+    Limit::Snippet,
+];
+
+pub fn limits_for(s: Source) -> &'static [Limit] {
+    match s {
+        Source::Text => LIMITS_TEXT,
+        Source::Code => LIMITS_CODE,
+    }
+}
+
+pub fn source_label(s: Source) -> &'static str {
+    match s {
+        Source::Text => "text",
+        Source::Code => "code",
+    }
 }
 
 pub fn lang_label(l: Lang) -> &'static str {
@@ -66,55 +76,20 @@ pub fn lang_label(l: Lang) -> &'static str {
     }
 }
 
-pub fn type_label(m: Mode) -> &'static str {
-    match m {
-        Mode::Time => "time",
-        Mode::Words => "words",
-        Mode::Code => "code",
+pub fn limit_label(l: Limit) -> String {
+    match l {
+        Limit::Time(n) => format!("{}s", n),
+        Limit::Count(n) => format!("{}", n),
+        Limit::Snippet => "snippet".to_string(),
     }
 }
 
-pub fn amount_label(p: &Preset) -> String {
-    match p.mode {
-        Mode::Time => format!("{}s", p.amount),
-        Mode::Words => format!("{}", p.amount),
-        Mode::Code => lang_label(p.lang.unwrap_or(Lang::Rust)).to_string(),
-    }
+pub fn next_in<T: PartialEq + Copy>(list: &[T], current: T) -> T {
+    let pos = list.iter().position(|x| *x == current).unwrap_or(0);
+    list[(pos + 1) % list.len()]
 }
 
-pub const TYPES: &[Mode] = &[Mode::Time, Mode::Words, Mode::Code];
-
-fn group(mode: Mode) -> Vec<usize> {
-    PRESETS
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| p.mode == mode)
-        .map(|(i, _)| i)
-        .collect()
-}
-
-pub fn next_in_type(current: usize) -> usize {
-    let g = group(PRESETS[current].mode);
-    let pos = g.iter().position(|&i| i == current).unwrap_or(0);
-    g[(pos + 1) % g.len()]
-}
-
-pub fn prev_in_type(current: usize) -> usize {
-    let g = group(PRESETS[current].mode);
-    let pos = g.iter().position(|&i| i == current).unwrap_or(0);
-    g[(pos + g.len() - 1) % g.len()]
-}
-
-pub fn next_type(current: usize) -> usize {
-    let cur = PRESETS[current].mode;
-    let pos = TYPES.iter().position(|t| *t == cur).unwrap_or(0);
-    let next = TYPES[(pos + 1) % TYPES.len()];
-    group(next)[0]
-}
-
-pub fn prev_type(current: usize) -> usize {
-    let cur = PRESETS[current].mode;
-    let pos = TYPES.iter().position(|t| *t == cur).unwrap_or(0);
-    let prev = TYPES[(pos + TYPES.len() - 1) % TYPES.len()];
-    group(prev)[0]
+pub fn prev_in<T: PartialEq + Copy>(list: &[T], current: T) -> T {
+    let pos = list.iter().position(|x| *x == current).unwrap_or(0);
+    list[(pos + list.len() - 1) % list.len()]
 }

@@ -15,12 +15,12 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::app::App;
-use crate::cli::Cli;
+use crate::cli::{Cli, Limit};
 use crate::event_loop::event_loop;
 
 fn run() -> io::Result<()> {
     let cli = Cli::parse();
-    let mut app = App::new(cli.mode, cli.amount, cli.lang);
+    let mut app = App::new(cli.source, Limit::Time(30), cli.lang);
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();

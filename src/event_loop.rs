@@ -6,7 +6,7 @@ use ratatui::Terminal;
 
 use crate::app::App;
 use crate::cli::{
-    next_in_type, next_type, prev_in_type, prev_type, preset_index, Mode, PRESETS,
+    limits_for, next_in, prev_in, Limit, Source, LANGS, SOURCES,
 };
 use crate::ui::draw;
 
@@ -16,10 +16,9 @@ pub fn event_loop<B: ratatui::backend::Backend>(
 ) -> io::Result<()> {
     let tick = Duration::from_millis(100);
     let mut last_tick = Instant::now();
-    let mut preset_idx = preset_index(app.mode, app.amount, app.lang);
 
     loop {
-        terminal.draw(|f| draw(f, app, preset_idx))?;
+        terminal.draw(|f| draw(f, app))?;
 
         let timeout = tick.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)? {
@@ -37,39 +36,48 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                     KeyCode::Esc => return Ok(()),
                     KeyCode::Tab => {
                         if can_cycle {
-                            preset_idx = next_in_type(preset_idx);
-                        } else {
-                            preset_idx = preset_index(app.mode, app.amount, app.lang);
+                            let limits = limits_for(app.source);
+                            app.limit = next_in(limits, app.limit);
                         }
-                        let p = PRESETS[preset_idx];
-                        *app = App::new(p.mode, p.amount, p.lang);
+                        *app = App::new(app.source, app.limit, app.lang);
                     }
                     KeyCode::BackTab => {
                         if can_cycle {
-                            preset_idx = prev_in_type(preset_idx);
-                            let p = PRESETS[preset_idx];
-                            *app = App::new(p.mode, p.amount, p.lang);
+                            let limits = limits_for(app.source);
+                            app.limit = prev_in(limits, app.limit);
+                            *app = App::new(app.source, app.limit, app.lang);
                         }
                     }
                     KeyCode::Up => {
                         if can_cycle {
-                            preset_idx = prev_type(preset_idx);
-                            let p = PRESETS[preset_idx];
-                            *app = App::new(p.mode, p.amount, p.lang);
+                            let new_src = prev_in(SOURCES, app.source);
+                            let new_limit = adjust_limit(app.limit, new_src);
+                            *app = App::new(new_src, new_limit, app.lang);
                         }
                     }
                     KeyCode::Down => {
                         if can_cycle {
-                            preset_idx = next_type(preset_idx);
-                            let p = PRESETS[preset_idx];
-                            *app = App::new(p.mode, p.amount, p.lang);
+                            let new_src = next_in(SOURCES, app.source);
+                            let new_limit = adjust_limit(app.limit, new_src);
+                            *app = App::new(new_src, new_limit, app.lang);
+                        }
+                    }
+                    KeyCode::Left => {
+                        if can_cycle && matches!(app.source, Source::Code) {
+                            app.lang = prev_in(LANGS, app.lang);
+                            *app = App::new(app.source, app.limit, app.lang);
+                        }
+                    }
+                    KeyCode::Right => {
+                        if can_cycle && matches!(app.source, Source::Code) {
+                            app.lang = next_in(LANGS, app.lang);
+                            *app = App::new(app.source, app.limit, app.lang);
                         }
                     }
                     KeyCode::Enter => {
                         if app.finished {
-                            let p = PRESETS[preset_idx];
-                            *app = App::new(p.mode, p.amount, p.lang);
-                        } else if matches!(app.mode, Mode::Code) {
+                            *app = App::new(app.source, app.limit, app.lang);
+                        } else if app.is_code() {
                             app.push('\n');
                         }
                     }
@@ -92,5 +100,14 @@ pub fn event_loop<B: ratatui::backend::Backend>(
             app.tick();
             last_tick = Instant::now();
         }
+    }
+}
+
+fn adjust_limit(current: Limit, new_source: Source) -> Limit {
+    let allowed = limits_for(new_source);
+    if allowed.contains(&current) {
+        current
+    } else {
+        allowed[0]
     }
 }

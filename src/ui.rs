@@ -7,12 +7,14 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::cli::{amount_label, lang_label, type_label, Mode, PRESETS};
+use crate::cli::{
+    lang_label, limit_label, limits_for, source_label, Lang, Limit, Source, LANGS, SOURCES,
+};
 
 const VISIBLE_LINES: usize = 3;
 const SIDEBAR_WIDTH: u16 = 22;
 
-pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
+pub fn draw(f: &mut Frame, app: &App) {
     if app.finished {
         draw_results(f, app);
         return;
@@ -28,23 +30,21 @@ pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
+    let mode_h = if matches!(app.source, Source::Code) { 5 } else { 4 };
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),
+            Constraint::Length(mode_h),
             Constraint::Min(7),
             Constraint::Length(2),
         ])
         .split(inner);
 
-    draw_mode_bar(f, preset_idx, app.start.is_some(), rows[0]);
+    draw_mode_bar(f, app, rows[0]);
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(SIDEBAR_WIDTH),
-            Constraint::Min(20),
-        ])
+        .constraints([Constraint::Length(SIDEBAR_WIDTH), Constraint::Min(20)])
         .split(rows[1]);
 
     draw_stats(f, app, cols[0]);
@@ -52,7 +52,10 @@ pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
     draw_footer(f, app, rows[2]);
 }
 
-fn draw_mode_bar(f: &mut Frame, idx: usize, started: bool, area: Rect) {
+fn draw_mode_bar(f: &mut Frame, app: &App, area: Rect) {
+    let started = app.start.is_some();
+    let is_code = matches!(app.source, Source::Code);
+
     let block = Block::default()
         .borders(Borders::BOTTOM)
         .border_style(Style::default().fg(Color::DarkGray))
@@ -60,66 +63,64 @@ fn draw_mode_bar(f: &mut Frame, idx: usize, started: bool, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
+    let row_count = if is_code { 3 } else { 2 };
+    let constraints: Vec<Constraint> = (0..row_count).map(|_| Constraint::Length(1)).collect();
     let inner_rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Length(1)])
+        .constraints(constraints)
         .split(inner);
 
-    let current_mode = PRESETS[idx].mode;
     let sep = Span::styled("  ·  ", Style::default().fg(Color::DarkGray));
-    let divider = Span::styled("   │   ", Style::default().fg(Color::DarkGray));
 
-    let time_presets: Vec<(usize, &crate::cli::Preset)> = PRESETS
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| p.mode == Mode::Time)
-        .collect();
-
-    let mut row1: Vec<Span> = vec![Span::raw(" ")];
-    for (j, (gi, p)) in time_presets.iter().enumerate() {
-        let selected = *gi == idx;
-        row1.push(Span::styled(format!(" {} ", amount_label(p)), chip_style(selected, started)));
-        if j + 1 < time_presets.len() {
-            row1.push(sep.clone());
+    let mut row_src: Vec<Span> = vec![Span::styled(" source: ", Style::default().fg(Color::DarkGray))];
+    for (i, s) in SOURCES.iter().enumerate() {
+        let selected = app.source == *s;
+        row_src.push(Span::styled(
+            format!(" {} ", source_label(*s)),
+            chip_style(selected, started),
+        ));
+        if i + 1 < SOURCES.len() {
+            row_src.push(sep.clone());
         }
     }
-    row1.push(divider.clone());
-    for (j, t) in [Mode::Words, Mode::Code].iter().enumerate() {
-        let selected = current_mode == *t;
-        row1.push(Span::styled(format!(" {} ", type_label(*t)), chip_style(selected, started)));
-        if j + 1 < 2 {
-            row1.push(sep.clone());
-        }
-    }
-    let hint1 = if started {
+    let hint = if started {
         "    tab restart"
+    } else if is_code {
+        "    ↑↓ source · ←→ lang · tab limit"
     } else {
-        "    ↑↓ switch · tab cycle"
+        "    ↑↓ source · tab limit"
     };
-    row1.push(Span::styled(hint1, Style::default().fg(Color::DarkGray)));
-    f.render_widget(Paragraph::new(Line::from(row1)), inner_rows[0]);
+    row_src.push(Span::styled(hint, Style::default().fg(Color::DarkGray)));
+    f.render_widget(Paragraph::new(Line::from(row_src)), inner_rows[0]);
 
-    if current_mode != Mode::Time {
-        let group: Vec<(usize, &crate::cli::Preset)> = PRESETS
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.mode == current_mode)
-            .collect();
-        let label_prefix = match current_mode {
-            Mode::Words => " words: ",
-            Mode::Code => " code:  ",
-            _ => " ",
-        };
-        let mut row2: Vec<Span> =
-            vec![Span::styled(label_prefix, Style::default().fg(Color::DarkGray))];
-        for (j, (gi, p)) in group.iter().enumerate() {
-            let selected = *gi == idx;
-            row2.push(Span::styled(format!(" {} ", amount_label(p)), chip_style(selected, started)));
-            if j + 1 < group.len() {
-                row2.push(sep.clone());
+    let limits = limits_for(app.source);
+    let mut row_lim: Vec<Span> = vec![Span::styled(" limit:  ", Style::default().fg(Color::DarkGray))];
+    for (i, l) in limits.iter().enumerate() {
+        let selected = app.limit == *l;
+        row_lim.push(Span::styled(
+            format!(" {} ", limit_label(*l)),
+            chip_style(selected, started),
+        ));
+        if i + 1 < limits.len() {
+            row_lim.push(sep.clone());
+        }
+    }
+    f.render_widget(Paragraph::new(Line::from(row_lim)), inner_rows[1]);
+
+    if is_code {
+        let mut row_lang: Vec<Span> =
+            vec![Span::styled(" lang:   ", Style::default().fg(Color::DarkGray))];
+        for (i, l) in LANGS.iter().enumerate() {
+            let selected = app.lang == *l;
+            row_lang.push(Span::styled(
+                format!(" {} ", lang_label(*l)),
+                chip_style(selected, started),
+            ));
+            if i + 1 < LANGS.len() {
+                row_lang.push(sep.clone());
             }
         }
-        f.render_widget(Paragraph::new(Line::from(row2)), inner_rows[1]);
+        f.render_widget(Paragraph::new(Line::from(row_lang)), inner_rows[2]);
     }
 }
 
@@ -144,23 +145,22 @@ fn draw_stats(f: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
+    let primary: (&str, String, Color) = match app.limit {
+        Limit::Time(_) => ("time", format!("{:.0}s", app.time_left()), Color::Cyan),
+        Limit::Count(_) => (
+            "words",
+            format!("{}/{}", app.words_done(), app.target_words),
+            Color::Cyan,
+        ),
+        Limit::Snippet => (
+            "chars",
+            format!("{}/{}", app.typed.len(), app.target.len()),
+            Color::Cyan,
+        ),
+    };
+
     let rows: Vec<(&str, String, Color)> = vec![
-        match app.mode {
-            Mode::Time => ("time", format!("{:.0}s", app.time_left()), Color::Cyan),
-            Mode::Words => (
-                "words",
-                format!("{}/{}", app.words_done(), app.target_words),
-                Color::Cyan,
-            ),
-            Mode::Code => (
-                "lang",
-                app.lang
-                    .map(lang_label)
-                    .unwrap_or("plain")
-                    .to_string(),
-                Color::Cyan,
-            ),
-        },
+        primary,
         ("wpm", format!("{:.1}", app.wpm()), Color::Green),
         ("raw", format!("{:.1}", app.raw_wpm()), Color::Gray),
         ("acc", format!("{:.1}%", app.accuracy()), Color::Yellow),
@@ -198,7 +198,7 @@ fn draw_stats(f: &mut Frame, app: &App, area: Rect) {
 fn draw_typing(f: &mut Frame, app: &App, area: Rect) {
     let inner_w = area.width.saturating_sub(4) as usize;
     let inner_h = area.height as usize;
-    let is_code = matches!(app.mode, Mode::Code);
+    let is_code = app.is_code();
     let line_width = inner_w.max(20);
 
     let lines = wrap_lines(&app.target, line_width);
@@ -254,15 +254,8 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let text = if app.finished {
-        format!(
-            " done · wpm {:.1} · raw {:.1} · acc {:.1}% · enter to exit ",
-            app.wpm(),
-            app.raw_wpm(),
-            app.accuracy()
-        )
-    } else if app.start.is_none() {
-        " pick mode with tab · type to start · esc quit ".to_string()
+    let text = if app.start.is_none() {
+        " pick mode with tab/arrows · type to start · esc quit ".to_string()
     } else {
         format!(
             " {:.1}s · raw {:.1} · tab restart · esc quit ",
@@ -335,19 +328,7 @@ fn draw_results(f: &mut Frame, app: &App) {
         sep(),
         kv("accuracy", format!("{:.1}%", app.accuracy()), Color::Green),
         sep(),
-        kv(
-            match app.mode {
-                Mode::Time => "time",
-                Mode::Words => "words",
-                Mode::Code => "lang",
-            },
-            match app.mode {
-                Mode::Time => format!("{:.1}s", app.elapsed()),
-                Mode::Words => format!("{}/{}", app.words_done(), app.target_words),
-                Mode::Code => app.lang.map(lang_label).unwrap_or("plain").to_string(),
-            },
-            Color::Cyan,
-        ),
+        kv("time", format!("{:.1}s", app.elapsed()), Color::Cyan),
     ]
     .into_iter()
     .flatten()
@@ -367,17 +348,13 @@ fn draw_results(f: &mut Frame, app: &App) {
     .flatten()
     .collect();
     f.render_widget(
-        Paragraph::new(vec![
-            Line::from(g1),
-            Line::raw(""),
-            Line::from(g2),
-        ])
-        .alignment(Alignment::Center),
+        Paragraph::new(vec![Line::from(g1), Line::raw(""), Line::from(g2)])
+            .alignment(Alignment::Center),
         rows[3],
     );
 
     f.render_widget(
-        Paragraph::new("enter retry · tab next mode · shift+tab prev · esc exit")
+        Paragraph::new("enter retry · tab next limit · ↑↓ source · esc exit")
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::DarkGray)),
         rows[5],
@@ -482,7 +459,7 @@ fn line_for_range(
     is_current: bool,
     width: usize,
 ) -> Line<'static> {
-    let is_code = matches!(app.mode, Mode::Code);
+    let is_code = app.is_code();
     let mut spans: Vec<Span> = Vec::with_capacity(end - start);
     let mut visible = 0usize;
     for i in start..end {
@@ -530,3 +507,6 @@ fn line_for_range(
     }
     Line::from(spans)
 }
+
+#[allow(dead_code)]
+fn _unused(_: Lang) {}
