@@ -13,6 +13,10 @@ const VISIBLE_LINES: usize = 3;
 const SIDEBAR_WIDTH: u16 = 22;
 
 pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
+    if app.finished {
+        draw_results(f, app);
+        return;
+    }
     let area = f.area();
     let outer = Block::default()
         .borders(Borders::ALL)
@@ -193,6 +197,160 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
             .style(Style::default().fg(Color::Cyan)),
         inner,
     );
+}
+
+fn draw_results(f: &mut Frame, app: &App) {
+    let area = f.area();
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title(Span::styled(
+            " results ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(7),
+            Constraint::Length(2),
+            Constraint::Length(3),
+            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .split(inner);
+
+    let wpm_big = big_number(&format!("{:.0}", app.wpm()));
+    let wpm_lines: Vec<Line> = wpm_big
+        .into_iter()
+        .map(|s| {
+            Line::from(Span::styled(
+                s,
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ))
+        })
+        .collect();
+    f.render_widget(
+        Paragraph::new(wpm_lines).alignment(Alignment::Center),
+        rows[1],
+    );
+
+    f.render_widget(
+        Paragraph::new("wpm")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray)),
+        rows[2],
+    );
+
+    let g1: Vec<Span> = vec![
+        kv("raw", format!("{:.1}", app.raw_wpm()), Color::Gray),
+        sep(),
+        kv("accuracy", format!("{:.1}%", app.accuracy()), Color::Green),
+        sep(),
+        kv(
+            match app.mode {
+                Mode::Time => "time",
+                Mode::Words => "words",
+            },
+            match app.mode {
+                Mode::Time => format!("{:.1}s", app.elapsed()),
+                Mode::Words => format!("{}/{}", app.words_done(), app.target_words),
+            },
+            Color::Cyan,
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let g2: Vec<Span> = vec![
+        kv("correct", format!("{}", app.correct), Color::Green),
+        sep(),
+        kv("wrong", format!("{}", app.incorrect), Color::Red),
+        sep(),
+        kv(
+            "chars",
+            format!("{}", app.correct + app.incorrect),
+            Color::Gray,
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(g1),
+            Line::raw(""),
+            Line::from(g2),
+        ])
+        .alignment(Alignment::Center),
+        rows[3],
+    );
+
+    f.render_widget(
+        Paragraph::new("enter retry · tab next mode · shift+tab prev · esc exit")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray)),
+        rows[5],
+    );
+}
+
+fn kv(label: &str, value: String, color: Color) -> Vec<Span<'static>> {
+    vec![
+        Span::styled(
+            format!("{}: ", label),
+            Style::default().fg(Color::DarkGray),
+        ),
+        Span::styled(
+            value,
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ),
+    ]
+}
+
+fn sep() -> Vec<Span<'static>> {
+    vec![Span::styled(
+        "   ·   ",
+        Style::default().fg(Color::DarkGray),
+    )]
+}
+
+fn big_number(s: &str) -> Vec<String> {
+    let glyphs: Vec<Vec<&str>> = s.chars().map(big_glyph).collect();
+    let mut rows = vec![String::new(); 5];
+    for (i, row) in rows.iter_mut().enumerate() {
+        for (j, g) in glyphs.iter().enumerate() {
+            row.push_str(g[i]);
+            if j + 1 < glyphs.len() {
+                row.push(' ');
+            }
+        }
+    }
+    rows
+}
+
+fn big_glyph(c: char) -> Vec<&'static str> {
+    match c {
+        '0' => vec!["█████", "█   █", "█   █", "█   █", "█████"],
+        '1' => vec!["  █  ", " ██  ", "  █  ", "  █  ", " ███ "],
+        '2' => vec!["█████", "    █", "█████", "█    ", "█████"],
+        '3' => vec!["█████", "    █", " ████", "    █", "█████"],
+        '4' => vec!["█   █", "█   █", "█████", "    █", "    █"],
+        '5' => vec!["█████", "█    ", "█████", "    █", "█████"],
+        '6' => vec!["█████", "█    ", "█████", "█   █", "█████"],
+        '7' => vec!["█████", "    █", "   █ ", "  █  ", "  █  "],
+        '8' => vec!["█████", "█   █", "█████", "█   █", "█████"],
+        '9' => vec!["█████", "█   █", "█████", "    █", "█████"],
+        '.' => vec!["     ", "     ", "     ", "     ", "  █  "],
+        _ => vec!["     ", "     ", "     ", "     ", "     "],
+    }
 }
 
 fn preset_label(p: &Preset) -> String {
