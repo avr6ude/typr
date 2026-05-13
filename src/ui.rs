@@ -116,14 +116,25 @@ fn draw_stats(f: &mut Frame, app: &App, area: Rect) {
         ),
     ];
 
+    let divider_w = inner.width.saturating_sub(2) as usize;
+    let divider = Line::from(Span::styled(
+        format!(" {} ", "─".repeat(divider_w)),
+        Style::default().fg(Color::DarkGray),
+    ));
+
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::raw(""));
-    for (k, v, c) in rows {
+    let last = rows.len();
+    for (i, (k, v, c)) in rows.into_iter().enumerate() {
         lines.push(Line::from(vec![
             Span::styled(format!("  {:<7}", k), Style::default().fg(Color::DarkGray)),
             Span::styled(v, Style::default().fg(c).add_modifier(Modifier::BOLD)),
         ]));
-        lines.push(Line::raw(""));
+        if i + 1 < last {
+            lines.push(Line::raw(""));
+            lines.push(divider.clone());
+            lines.push(Line::raw(""));
+        }
     }
 
     f.render_widget(Paragraph::new(lines), inner);
