@@ -65,3 +65,56 @@ pub fn lang_label(l: Lang) -> &'static str {
         Lang::Go => "go",
     }
 }
+
+pub fn type_label(m: Mode) -> &'static str {
+    match m {
+        Mode::Time => "time",
+        Mode::Words => "words",
+        Mode::Code => "code",
+    }
+}
+
+pub fn amount_label(p: &Preset) -> String {
+    match p.mode {
+        Mode::Time => format!("{}s", p.amount),
+        Mode::Words => format!("{}", p.amount),
+        Mode::Code => lang_label(p.lang.unwrap_or(Lang::Rust)).to_string(),
+    }
+}
+
+pub const TYPES: &[Mode] = &[Mode::Time, Mode::Words, Mode::Code];
+
+fn group(mode: Mode) -> Vec<usize> {
+    PRESETS
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.mode == mode)
+        .map(|(i, _)| i)
+        .collect()
+}
+
+pub fn next_in_type(current: usize) -> usize {
+    let g = group(PRESETS[current].mode);
+    let pos = g.iter().position(|&i| i == current).unwrap_or(0);
+    g[(pos + 1) % g.len()]
+}
+
+pub fn prev_in_type(current: usize) -> usize {
+    let g = group(PRESETS[current].mode);
+    let pos = g.iter().position(|&i| i == current).unwrap_or(0);
+    g[(pos + g.len() - 1) % g.len()]
+}
+
+pub fn next_type(current: usize) -> usize {
+    let cur = PRESETS[current].mode;
+    let pos = TYPES.iter().position(|t| *t == cur).unwrap_or(0);
+    let next = TYPES[(pos + 1) % TYPES.len()];
+    group(next)[0]
+}
+
+pub fn prev_type(current: usize) -> usize {
+    let cur = PRESETS[current].mode;
+    let pos = TYPES.iter().position(|t| *t == cur).unwrap_or(0);
+    let prev = TYPES[(pos + TYPES.len() - 1) % TYPES.len()];
+    group(prev)[0]
+}

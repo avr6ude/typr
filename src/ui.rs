@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::cli::{lang_label, Mode, Preset, PRESETS};
+use crate::cli::{amount_label, lang_label, type_label, Mode, PRESETS, TYPES};
 
 const VISIBLE_LINES: usize = 3;
 const SIDEBAR_WIDTH: u16 = 22;
@@ -31,7 +31,7 @@ pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
+            Constraint::Length(4),
             Constraint::Min(7),
             Constraint::Length(2),
         ])
@@ -60,33 +60,58 @@ fn draw_mode_bar(f: &mut Frame, idx: usize, started: bool, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let mut spans: Vec<Span> = Vec::new();
-    spans.push(Span::raw(" "));
-    for (i, p) in PRESETS.iter().enumerate() {
-        let label = preset_label(p);
-        let style = if i == idx {
-            Style::default()
-                .bg(Color::Yellow)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD)
-        } else if started {
-            Style::default().fg(Color::DarkGray)
-        } else {
-            Style::default().fg(Color::Gray)
-        };
-        spans.push(Span::styled(format!(" {label} "), style));
-        if i + 1 < PRESETS.len() {
-            spans.push(Span::styled("·", Style::default().fg(Color::DarkGray)));
+    let inner_rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Length(1)])
+        .split(inner);
+
+    let current_mode = PRESETS[idx].mode;
+
+    let mut row1: Vec<Span> = vec![Span::raw(" ")];
+    for (i, t) in TYPES.iter().enumerate() {
+        let selected = *t == current_mode;
+        let style = chip_style(selected, started);
+        row1.push(Span::styled(format!(" {} ", type_label(*t)), style));
+        if i + 1 < TYPES.len() {
+            row1.push(Span::styled("  ·  ", Style::default().fg(Color::DarkGray)));
         }
     }
-    let hint = if started {
-        "   tab restart"
+    let hint1 = if started {
+        "    tab restart"
     } else {
-        "   tab cycle · shift+tab back"
+        "    ↑↓ switch · tab cycle"
     };
-    spans.push(Span::styled(hint, Style::default().fg(Color::DarkGray)));
+    row1.push(Span::styled(hint1, Style::default().fg(Color::DarkGray)));
+    f.render_widget(Paragraph::new(Line::from(row1)), inner_rows[0]);
 
-    f.render_widget(Paragraph::new(Line::from(spans)), inner);
+    let group: Vec<(usize, &crate::cli::Preset)> = PRESETS
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.mode == current_mode)
+        .collect();
+    let mut row2: Vec<Span> = vec![Span::raw(" ")];
+    for (j, (gi, p)) in group.iter().enumerate() {
+        let selected = *gi == idx;
+        let style = chip_style(selected, started);
+        row2.push(Span::styled(format!(" {} ", amount_label(p)), style));
+        if j + 1 < group.len() {
+            row2.push(Span::styled("  ·  ", Style::default().fg(Color::DarkGray)));
+        }
+    }
+    f.render_widget(Paragraph::new(Line::from(row2)), inner_rows[1]);
+}
+
+fn chip_style(selected: bool, started: bool) -> Style {
+    if selected {
+        Style::default()
+            .bg(Color::Yellow)
+            .fg(Color::Black)
+            .add_modifier(Modifier::BOLD)
+    } else if started {
+        Style::default().fg(Color::DarkGray)
+    } else {
+        Style::default().fg(Color::Gray)
+    }
 }
 
 fn draw_stats(f: &mut Frame, app: &App, area: Rect) {
@@ -385,14 +410,6 @@ fn big_glyph(c: char) -> Vec<&'static str> {
         '9' => vec!["█████", "█   █", "█████", "    █", "█████"],
         '.' => vec!["     ", "     ", "     ", "     ", "  █  "],
         _ => vec!["     ", "     ", "     ", "     ", "     "],
-    }
-}
-
-fn preset_label(p: &Preset) -> String {
-    match p.mode {
-        Mode::Time => format!("time {}s", p.amount),
-        Mode::Words => format!("words {}", p.amount),
-        Mode::Code => format!("code {}", lang_label(p.lang.unwrap())),
     }
 }
 

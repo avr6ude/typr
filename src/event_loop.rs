@@ -5,7 +5,9 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::Terminal;
 
 use crate::app::App;
-use crate::cli::{preset_index, Mode, PRESETS};
+use crate::cli::{
+    next_in_type, next_type, prev_in_type, prev_type, preset_index, Mode, PRESETS,
+};
 use crate::ui::draw;
 
 pub fn event_loop<B: ratatui::backend::Backend>(
@@ -35,7 +37,7 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                     KeyCode::Esc => return Ok(()),
                     KeyCode::Tab => {
                         if can_cycle {
-                            preset_idx = (preset_idx + 1) % PRESETS.len();
+                            preset_idx = next_in_type(preset_idx);
                         } else {
                             preset_idx = preset_index(app.mode, app.amount, app.lang);
                         }
@@ -44,7 +46,21 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                     }
                     KeyCode::BackTab => {
                         if can_cycle {
-                            preset_idx = (preset_idx + PRESETS.len() - 1) % PRESETS.len();
+                            preset_idx = prev_in_type(preset_idx);
+                            let p = PRESETS[preset_idx];
+                            *app = App::new(p.mode, p.amount, p.lang);
+                        }
+                    }
+                    KeyCode::Up => {
+                        if can_cycle {
+                            preset_idx = prev_type(preset_idx);
+                            let p = PRESETS[preset_idx];
+                            *app = App::new(p.mode, p.amount, p.lang);
+                        }
+                    }
+                    KeyCode::Down => {
+                        if can_cycle {
+                            preset_idx = next_type(preset_idx);
                             let p = PRESETS[preset_idx];
                             *app = App::new(p.mode, p.amount, p.lang);
                         }
