@@ -111,11 +111,17 @@ pub fn limit_label(l: Limit) -> String {
 }
 
 pub fn next_in<T: PartialEq + Copy>(list: &[T], current: T) -> T {
+    if list.is_empty() {
+        return current;
+    }
     let pos = list.iter().position(|x| *x == current).unwrap_or(0);
     list[(pos + 1) % list.len()]
 }
 
 pub fn prev_in<T: PartialEq + Copy>(list: &[T], current: T) -> T {
+    if list.is_empty() {
+        return current;
+    }
     let pos = list.iter().position(|x| *x == current).unwrap_or(0);
     list[(pos + list.len() - 1) % list.len()]
 }

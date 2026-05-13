@@ -31,9 +31,21 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                 {
                     return Ok(());
                 }
+                let suppressed = key.modifiers.intersects(
+                    KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER,
+                );
+                if suppressed && matches!(key.code, KeyCode::Char(_)) {
+                    continue;
+                }
                 let can_cycle = app.start.is_none() || app.finished;
                 match key.code {
-                    KeyCode::Esc => return Ok(()),
+                    KeyCode::Esc => {
+                        if app.start.is_some() && !app.finished {
+                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
+                        } else {
+                            return Ok(());
+                        }
+                    }
                     KeyCode::Tab => {
                         if can_cycle {
                             let limits = limits_for(app.source);
@@ -98,7 +110,7 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                     KeyCode::Enter => {
                         if app.finished {
                             *app = App::new(app.source, app.limit, app.lang, app.difficulty);
-                        } else if app.is_code() {
+                        } else if app.is_code() && app.start.is_some() {
                             app.push('\n');
                         }
                     }

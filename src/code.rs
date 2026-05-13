@@ -1,11 +1,32 @@
+use std::sync::OnceLock;
+
 use rand::seq::SliceRandom;
 use ratatui::style::Color;
 use syntect::easy::HighlightLines;
-use syntect::highlighting::ThemeSet;
+use syntect::highlighting::{Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
 use crate::cli::Lang;
+
+static SYNTAXES: OnceLock<SyntaxSet> = OnceLock::new();
+static THEMES: OnceLock<ThemeSet> = OnceLock::new();
+
+fn syntaxes() -> &'static SyntaxSet {
+    SYNTAXES.get_or_init(SyntaxSet::load_defaults_newlines)
+}
+
+fn themes() -> &'static ThemeSet {
+    THEMES.get_or_init(ThemeSet::load_defaults)
+}
+
+fn theme() -> &'static Theme {
+    let ts = themes();
+    ts.themes
+        .get("base16-ocean.dark")
+        .or_else(|| ts.themes.values().next())
+        .expect("at least one theme bundled")
+}
 
 const RUST: &[&str] = &[
     "fn fibonacci(n: u32) -> u64 {\n    let mut a: u64 = 0;\n    let mut b: u64 = 1;\n    for _ in 0..n {\n        let next = a + b;\n        a = b;\n        b = next;\n    }\n    a\n}",
@@ -49,19 +70,21 @@ pub fn long_sample(lang: Lang, target_chars: usize) -> String {
     let mut rng = rand::thread_rng();
     let p = pool(lang);
     let mut out = String::new();
-    while out.chars().count() < target_chars {
+    let mut len = 0usize;
+    while len < target_chars {
         let s = p.choose(&mut rng).copied().unwrap();
         if !out.is_empty() {
             out.push_str("\n\n");
+            len += 2;
         }
         out.push_str(s);
+        len += s.chars().count();
     }
     out
 }
 
 pub fn highlight(text: &str, lang: Lang) -> Vec<Color> {
-    let ps = SyntaxSet::load_defaults_newlines();
-    let ts = ThemeSet::load_defaults();
+    let ps = syntaxes();
     let ext = match lang {
         Lang::Rust => "rs",
         Lang::Python => "py",
@@ -71,12 +94,11 @@ pub fn highlight(text: &str, lang: Lang) -> Vec<Color> {
     let syntax = ps
         .find_syntax_by_extension(ext)
         .unwrap_or_else(|| ps.find_syntax_plain_text());
-    let theme = &ts.themes["base16-ocean.dark"];
-    let mut h = HighlightLines::new(syntax, theme);
+    let mut h = HighlightLines::new(syntax, theme());
 
     let mut colors: Vec<Color> = Vec::with_capacity(text.chars().count());
     for line in LinesWithEndings::from(text) {
-        let ranges = h.highlight_line(line, &ps).unwrap_or_default();
+        let ranges = h.highlight_line(line, ps).unwrap_or_default();
         for (style, s) in ranges {
             let c = style.foreground;
             let color = Color::Rgb(c.r, c.g, c.b);

@@ -9,7 +9,6 @@ use std::io;
 
 use clap::Parser;
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -25,18 +24,14 @@ fn run() -> io::Result<()> {
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     let res = event_loop(&mut terminal, &mut app);
 
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
 
     print_results(&app);
@@ -44,7 +39,7 @@ fn run() -> io::Result<()> {
 }
 
 fn print_results(app: &App) {
-    if app.start.is_some() {
+    if app.finished {
         println!(
             "wpm {:.1} | raw {:.1} | acc {:.1}% | {:.1}s | {}/{} chars",
             app.wpm(),

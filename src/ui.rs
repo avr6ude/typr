@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::app::App;
 use crate::cli::{
-    difficulty_label, lang_label, limit_label, limits_for, source_label, Lang, Limit, Source,
+    difficulty_label, lang_label, limit_label, limits_for, source_label, Limit, Source,
     DIFFICULTIES, LANGS, SOURCES,
 };
 
@@ -138,6 +138,13 @@ fn draw_mode_bar(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(Line::from(row3)), inner_rows[2]);
 }
 
+fn dim_rgb(c: Color) -> Color {
+    match c {
+        Color::Rgb(r, g, b) => Color::Rgb(r / 2, g / 2, b / 2),
+        _ => Color::DarkGray,
+    }
+}
+
 fn chip_style(selected: bool, started: bool) -> Style {
     if selected {
         Style::default()
@@ -178,11 +185,7 @@ fn draw_stats(f: &mut Frame, app: &App, area: Rect) {
         ("wpm", format!("{:.1}", app.wpm()), Color::Green),
         ("raw", format!("{:.1}", app.raw_wpm()), Color::Gray),
         ("acc", format!("{:.1}%", app.accuracy()), Color::Yellow),
-        (
-            "chars",
-            format!("{}/{}", app.correct, app.correct + app.incorrect),
-            Color::Gray,
-        ),
+        ("typed", format!("{}", app.keystrokes), Color::Gray),
     ];
 
     let divider_w = inner.width.saturating_sub(2) as usize;
@@ -236,7 +239,7 @@ fn draw_typing(f: &mut Frame, app: &App, area: Rect) {
     let used = if is_code {
         visible.len()
     } else {
-        visible.len() * 2 - 1
+        visible.len().saturating_mul(2).saturating_sub(1)
     };
     let top_pad = inner_h.saturating_sub(used) / 2;
 
@@ -270,9 +273,15 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
 
     let text = if app.start.is_none() {
         " pick mode with tab/arrows · type to start · esc quit ".to_string()
+    } else if app.is_code() {
+        format!(
+            " {:.1}s · raw {:.1} · tab indent · esc restart · ctrl+c quit ",
+            app.elapsed(),
+            app.raw_wpm()
+        )
     } else {
         format!(
-            " {:.1}s · raw {:.1} · tab restart · esc quit ",
+            " {:.1}s · raw {:.1} · esc restart · ctrl+c quit ",
             app.elapsed(),
             app.raw_wpm()
         )
@@ -496,7 +505,7 @@ fn line_for_range(
                 .bg(Color::White)
                 .add_modifier(Modifier::BOLD)
         } else if is_code {
-            Style::default().fg(syntax_color).add_modifier(Modifier::DIM)
+            Style::default().fg(dim_rgb(syntax_color))
         } else if is_current {
             Style::default().fg(Color::Gray)
         } else {
@@ -522,5 +531,3 @@ fn line_for_range(
     Line::from(spans)
 }
 
-#[allow(dead_code)]
-fn _unused(_: Lang) {}

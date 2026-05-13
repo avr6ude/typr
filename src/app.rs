@@ -13,6 +13,7 @@ pub struct App {
     pub colors: Vec<Color>,
     pub correct: usize,
     pub incorrect: usize,
+    pub keystrokes: usize,
     pub start: Option<Instant>,
     pub finished: bool,
     pub end_elapsed: Option<f64>,
@@ -29,11 +30,11 @@ impl App {
             Source::Code => {
                 let s = match limit {
                     Limit::Snippet => code::pick_sample(lang).to_string(),
-                    Limit::Time(_) | Limit::Count(_) => code::long_sample(lang, 2000),
+                    Limit::Time(secs) => code::long_sample(lang, (secs as usize * 25).max(2000)),
+                    Limit::Count(_) => code::long_sample(lang, 2000),
                 };
                 let colors = code::highlight(&s, lang);
-                let w = s.split_whitespace().count();
-                (s, colors, w)
+                (s, colors, 0)
             }
             Source::Text => {
                 let pool = words::pool(difficulty);
@@ -45,7 +46,10 @@ impl App {
                 let picked: Vec<String> = (0..count)
                     .map(|_| pool.choose(&mut rng).unwrap().clone())
                     .collect();
-                let s = picked.join(" ");
+                let mut s = picked.join(" ");
+                if matches!(limit, Limit::Count(_)) {
+                    s.push(' ');
+                }
                 let len = s.chars().count();
                 (s, vec![Color::Gray; len], count)
             }
@@ -57,6 +61,7 @@ impl App {
             colors,
             correct: 0,
             incorrect: 0,
+            keystrokes: 0,
             start: None,
             finished: false,
             end_elapsed: None,
@@ -153,6 +158,7 @@ impl App {
         } else {
             self.incorrect += 1;
         }
+        self.keystrokes += 1;
         self.typed.push(c);
         self.check_done();
     }
@@ -176,7 +182,9 @@ impl App {
                 }
             }
             Limit::Count(_) => {
-                if self.words_done() >= self.target_words {
+                if self.words_done() >= self.target_words
+                    || self.typed.len() >= self.target.len()
+                {
                     self.finish();
                 }
             }
@@ -189,6 +197,9 @@ impl App {
     }
 
     pub fn tick(&mut self) {
+        if self.finished {
+            return;
+        }
         if let Limit::Time(n) = self.limit {
             if self.start.is_some() && self.elapsed() >= n as f64 {
                 self.finish();

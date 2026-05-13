@@ -19,10 +19,20 @@ static E1K: OnceLock<Vec<String>> = OnceLock::new();
 static E5K: OnceLock<Vec<String>> = OnceLock::new();
 static E10K: OnceLock<Vec<String>> = OnceLock::new();
 
+const FALLBACK: &[&str] = &[
+    "the", "be", "of", "and", "to", "in", "have", "it", "that", "for", "they", "with", "as",
+    "not", "on", "at", "this", "but", "or", "from",
+];
+
 fn parse(s: &str) -> Vec<String> {
-    serde_json::from_str::<LangFile>(s)
+    let parsed: Vec<String> = serde_json::from_str::<LangFile>(s)
         .map(|l| l.words)
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if parsed.is_empty() {
+        FALLBACK.iter().map(|w| (*w).to_string()).collect()
+    } else {
+        parsed
+    }
 }
 
 pub fn pool(d: Difficulty) -> &'static [String] {
