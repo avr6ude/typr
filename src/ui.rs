@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
@@ -10,113 +10,188 @@ use crate::app::App;
 use crate::cli::{Mode, Preset, PRESETS};
 
 const VISIBLE_LINES: usize = 3;
-const LINE_WIDTH_CAP: usize = 80;
+const SIDEBAR_WIDTH: u16 = 22;
 
 pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
     let area = f.area();
-    let body_h = (VISIBLE_LINES * 2 - 1) as u16;
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(Span::styled(
+            " typr ",
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        ));
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
 
-    let chunks = Layout::default()
+    let rows = Layout::default()
         .direction(Direction::Vertical)
-        .horizontal_margin(4)
-        .vertical_margin(1)
         .constraints([
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Min(0),
-            Constraint::Length(body_h),
-            Constraint::Min(0),
-            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Min(7),
+            Constraint::Length(2),
         ])
-        .split(area);
+        .split(inner);
 
-    draw_header_line(f, app, chunks[0]);
-    draw_preset_line(f, preset_idx, app.start.is_some(), chunks[1]);
-    draw_body(f, app, chunks[3]);
-    draw_footer_line(f, app, chunks[5]);
+    draw_mode_bar(f, preset_idx, app.start.is_some(), rows[0]);
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(SIDEBAR_WIDTH),
+            Constraint::Min(20),
+        ])
+        .split(rows[1]);
+
+    draw_stats(f, app, cols[0]);
+    draw_typing(f, app, cols[1]);
+    draw_footer(f, app, rows[2]);
 }
 
-fn draw_header_line(f: &mut Frame, app: &App, area: Rect) {
-    let mode = match app.mode {
-        Mode::Time => format!("time {:>3.0}s", app.time_left()),
-        Mode::Words => format!("words {}/{}", app.words_done(), app.target_words),
-    };
-    let stats = format!("wpm {:.1}   acc {:.1}%", app.wpm(), app.accuracy());
+fn draw_mode_bar(f: &mut Frame, idx: usize, started: bool, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::BOTTOM)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(Span::styled(" mode ", Style::default().fg(Color::Gray)));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
 
-    let spans = vec![
-        Span::styled("typr ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("· {mode}"), Style::default().fg(Color::Cyan)),
-        Span::styled("   ", Style::default()),
-        Span::styled(stats, Style::default().fg(Color::Gray)),
-    ];
-    f.render_widget(Paragraph::new(Line::from(spans)).alignment(Alignment::Left), area);
-}
-
-fn draw_preset_line(f: &mut Frame, preset_idx: usize, started: bool, area: Rect) {
     let mut spans: Vec<Span> = Vec::new();
+    spans.push(Span::raw(" "));
     for (i, p) in PRESETS.iter().enumerate() {
         let label = preset_label(p);
-        let selected = i == preset_idx;
-        let style = if selected {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        let style = if i == idx {
+            Style::default()
+                .bg(Color::Yellow)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD)
         } else if started {
             Style::default().fg(Color::DarkGray)
         } else {
             Style::default().fg(Color::Gray)
         };
-        spans.push(Span::styled(label, style));
+        spans.push(Span::styled(format!(" {label} "), style));
         if i + 1 < PRESETS.len() {
-            spans.push(Span::styled("  ·  ", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled("·", Style::default().fg(Color::DarkGray)));
         }
     }
-    f.render_widget(Paragraph::new(Line::from(spans)).alignment(Alignment::Center), area);
+    let hint = if started {
+        "   tab restart"
+    } else {
+        "   tab cycle · shift+tab back"
+    };
+    spans.push(Span::styled(hint, Style::default().fg(Color::DarkGray)));
+
+    f.render_widget(Paragraph::new(Line::from(spans)), inner);
 }
 
-fn draw_body(f: &mut Frame, app: &App, area: Rect) {
-    let inner_width = area.width as usize;
-    let line_width = inner_width.min(LINE_WIDTH_CAP).max(20);
+fn draw_stats(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::RIGHT)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(Span::styled(" stats ", Style::default().fg(Color::Gray)));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let rows: Vec<(&str, String, Color)> = vec![
+        match app.mode {
+            Mode::Time => ("time", format!("{:.0}s", app.time_left()), Color::Cyan),
+            Mode::Words => (
+                "words",
+                format!("{}/{}", app.words_done(), app.target_words),
+                Color::Cyan,
+            ),
+        },
+        ("wpm", format!("{:.1}", app.wpm()), Color::Green),
+        ("raw", format!("{:.1}", app.raw_wpm()), Color::Gray),
+        ("acc", format!("{:.1}%", app.accuracy()), Color::Yellow),
+        (
+            "chars",
+            format!("{}/{}", app.correct, app.correct + app.incorrect),
+            Color::Gray,
+        ),
+    ];
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::raw(""));
+    for (k, v, c) in rows {
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<7}", k), Style::default().fg(Color::DarkGray)),
+            Span::styled(v, Style::default().fg(c).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::raw(""));
+    }
+
+    f.render_widget(Paragraph::new(lines), inner);
+}
+
+fn draw_typing(f: &mut Frame, app: &App, area: Rect) {
+    let inner_w = area.width.saturating_sub(4) as usize;
+    let inner_h = area.height as usize;
+    let line_width = inner_w.max(20);
 
     let lines = wrap_lines(&app.target, line_width);
     let cursor = app.typed.len();
-    let current_line = find_line(&lines, cursor);
+    let current = find_line(&lines, cursor);
 
     let half = VISIBLE_LINES / 2;
-    let start = current_line.saturating_sub(half);
+    let start = current.saturating_sub(half);
     let end = (start + VISIBLE_LINES).min(lines.len());
     let visible = &lines[start..end];
 
-    let mut rendered: Vec<Line> = Vec::with_capacity(visible.len() * 2);
+    let used = visible.len() * 2 - 1;
+    let top_pad = inner_h.saturating_sub(used) / 2;
+
+    let mut rendered: Vec<Line> = Vec::with_capacity(top_pad + visible.len() * 2);
+    for _ in 0..top_pad {
+        rendered.push(Line::raw(""));
+    }
     for (i, (s, e)) in visible.iter().enumerate() {
-        let is_current = start + i == current_line;
+        let is_current = start + i == current;
         rendered.push(line_for_range(app, *s, *e, is_current, line_width));
         if i + 1 < visible.len() {
             rendered.push(Line::raw(""));
         }
     }
 
-    f.render_widget(Paragraph::new(rendered).alignment(Alignment::Center), area);
+    let inner = Rect {
+        x: area.x + 2,
+        y: area.y,
+        width: area.width.saturating_sub(4),
+        height: area.height,
+    };
+    f.render_widget(Paragraph::new(rendered).alignment(Alignment::Center), inner);
 }
 
-fn draw_footer_line(f: &mut Frame, app: &App, area: Rect) {
+fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::TOP)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
     let text = if app.finished {
         format!(
-            "done · wpm {:.1} · raw {:.1} · acc {:.1}% · {}/{} chars · enter to exit",
+            " done · wpm {:.1} · raw {:.1} · acc {:.1}% · enter to exit ",
             app.wpm(),
             app.raw_wpm(),
-            app.accuracy(),
-            app.correct,
-            app.correct + app.incorrect
+            app.accuracy()
         )
     } else if app.start.is_none() {
-        "tab cycle mode · type to start · esc quit".to_string()
+        " pick mode with tab · type to start · esc quit ".to_string()
     } else {
-        format!("raw {:.1} · {:.1}s · tab restart · esc quit", app.raw_wpm(), app.elapsed())
+        format!(
+            " {:.1}s · raw {:.1} · tab restart · esc quit ",
+            app.elapsed(),
+            app.raw_wpm()
+        )
     };
+
     f.render_widget(
         Paragraph::new(text)
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::DarkGray)),
-        area,
+            .style(Style::default().fg(Color::Cyan)),
+        inner,
     );
 }
 
@@ -163,7 +238,13 @@ fn find_line(lines: &[(usize, usize)], cursor: usize) -> usize {
     lines.len().saturating_sub(1)
 }
 
-fn line_for_range(app: &App, start: usize, end: usize, is_current: bool, width: usize) -> Line<'static> {
+fn line_for_range(
+    app: &App,
+    start: usize,
+    end: usize,
+    is_current: bool,
+    width: usize,
+) -> Line<'static> {
     let mut spans: Vec<Span> = Vec::with_capacity(end - start);
     let pad = width.saturating_sub(end - start);
     for i in start..end {
