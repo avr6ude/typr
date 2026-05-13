@@ -3,10 +3,9 @@ use std::time::Instant;
 use rand::seq::SliceRandom;
 use ratatui::style::Color;
 
-use crate::cli::{Lang, Limit, Source};
+use crate::cli::{Difficulty, Lang, Limit, Source};
 use crate::code;
-
-const WORDS: &str = include_str!("words.txt");
+use crate::words;
 
 pub struct App {
     pub target: Vec<char>,
@@ -20,11 +19,12 @@ pub struct App {
     pub source: Source,
     pub limit: Limit,
     pub lang: Lang,
+    pub difficulty: Difficulty,
     pub target_words: usize,
 }
 
 impl App {
-    pub fn new(source: Source, limit: Limit, lang: Lang) -> Self {
+    pub fn new(source: Source, limit: Limit, lang: Lang, difficulty: Difficulty) -> Self {
         let (target_str, colors, target_words) = match source {
             Source::Code => {
                 let s = match limit {
@@ -36,14 +36,14 @@ impl App {
                 (s, colors, w)
             }
             Source::Text => {
-                let pool: Vec<&str> = WORDS.split_whitespace().collect();
+                let pool = words::pool(difficulty);
                 let mut rng = rand::thread_rng();
                 let count = match limit {
                     Limit::Count(n) => n as usize,
                     _ => 500,
                 };
                 let picked: Vec<String> = (0..count)
-                    .map(|_| pool.choose(&mut rng).unwrap().to_string())
+                    .map(|_| pool.choose(&mut rng).unwrap().clone())
                     .collect();
                 let s = picked.join(" ");
                 let len = s.chars().count();
@@ -63,6 +63,7 @@ impl App {
             source,
             limit,
             lang,
+            difficulty,
             target_words,
         }
     }

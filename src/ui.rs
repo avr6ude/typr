@@ -8,7 +8,8 @@ use ratatui::{
 
 use crate::app::App;
 use crate::cli::{
-    lang_label, limit_label, limits_for, source_label, Lang, Limit, Source, LANGS, SOURCES,
+    difficulty_label, lang_label, limit_label, limits_for, source_label, Lang, Limit, Source,
+    DIFFICULTIES, LANGS, SOURCES,
 };
 
 const VISIBLE_LINES: usize = 3;
@@ -30,7 +31,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
-    let mode_h = if matches!(app.source, Source::Code) { 5 } else { 4 };
+    let mode_h = 5;
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -63,11 +64,9 @@ fn draw_mode_bar(f: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let row_count = if is_code { 3 } else { 2 };
-    let constraints: Vec<Constraint> = (0..row_count).map(|_| Constraint::Length(1)).collect();
     let inner_rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(constraints)
+        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Length(1)])
         .split(inner);
 
     let sep = Span::styled("  ·  ", Style::default().fg(Color::DarkGray));
@@ -90,7 +89,7 @@ fn draw_mode_bar(f: &mut Frame, app: &App, area: Rect) {
     } else if is_code {
         "    ↑↓ source · ←→ lang · tab limit"
     } else {
-        "    ↑↓ source · tab limit"
+        "    ↑↓ source · ←→ difficulty · tab limit"
     };
     row_src.push(Span::styled(hint, Style::default().fg(Color::DarkGray)));
     f.render_widget(Paragraph::new(Line::from(row_src)), inner_rows[0]);
@@ -109,21 +108,34 @@ fn draw_mode_bar(f: &mut Frame, app: &App, area: Rect) {
     }
     f.render_widget(Paragraph::new(Line::from(row_lim)), inner_rows[1]);
 
-    if is_code {
-        let mut row_lang: Vec<Span> =
-            vec![Span::styled(" lang:   ", Style::default().fg(Color::DarkGray))];
-        for (i, l) in LANGS.iter().enumerate() {
-            let selected = app.lang == *l;
-            row_lang.push(Span::styled(
-                format!(" {} ", lang_label(*l)),
-                chip_style(selected, started),
-            ));
-            if i + 1 < LANGS.len() {
-                row_lang.push(sep.clone());
-            }
+    let (label, items): (&str, Vec<(String, bool)>) = if is_code {
+        (
+            " lang:   ",
+            LANGS
+                .iter()
+                .map(|l| (lang_label(*l).to_string(), app.lang == *l))
+                .collect(),
+        )
+    } else {
+        (
+            " words:  ",
+            DIFFICULTIES
+                .iter()
+                .map(|d| (difficulty_label(*d).to_string(), app.difficulty == *d))
+                .collect(),
+        )
+    };
+    let mut row3: Vec<Span> = vec![Span::styled(label, Style::default().fg(Color::DarkGray))];
+    for (i, (text, selected)) in items.iter().enumerate() {
+        row3.push(Span::styled(
+            format!(" {} ", text),
+            chip_style(*selected, started),
+        ));
+        if i + 1 < items.len() {
+            row3.push(sep.clone());
         }
-        f.render_widget(Paragraph::new(Line::from(row_lang)), inner_rows[2]);
     }
+    f.render_widget(Paragraph::new(Line::from(row3)), inner_rows[2]);
 }
 
 fn chip_style(selected: bool, started: bool) -> Style {

@@ -3,6 +3,7 @@ mod cli;
 mod code;
 mod event_loop;
 mod ui;
+mod words;
 
 use std::io;
 
@@ -20,7 +21,7 @@ use crate::event_loop::event_loop;
 
 fn run() -> io::Result<()> {
     let cli = Cli::parse();
-    let mut app = App::new(cli.source, Limit::Time(30), cli.lang);
+    let mut app = App::new(cli.source, Limit::Time(30), cli.lang, cli.difficulty);
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();

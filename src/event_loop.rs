@@ -6,7 +6,7 @@ use ratatui::Terminal;
 
 use crate::app::App;
 use crate::cli::{
-    limits_for, next_in, prev_in, Limit, Source, LANGS, SOURCES,
+    limits_for, next_in, prev_in, Limit, Source, DIFFICULTIES, LANGS, SOURCES,
 };
 use crate::ui::draw;
 
@@ -38,7 +38,7 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                         if can_cycle {
                             let limits = limits_for(app.source);
                             app.limit = next_in(limits, app.limit);
-                            *app = App::new(app.source, app.limit, app.lang);
+                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
                         } else if app.is_code() {
                             while app.typed.len() < app.target.len() {
                                 let next = app.target[app.typed.len()];
@@ -49,45 +49,55 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                                 }
                             }
                         } else {
-                            *app = App::new(app.source, app.limit, app.lang);
+                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
                         }
                     }
                     KeyCode::BackTab => {
                         if can_cycle {
                             let limits = limits_for(app.source);
                             app.limit = prev_in(limits, app.limit);
-                            *app = App::new(app.source, app.limit, app.lang);
+                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
                         }
                     }
                     KeyCode::Up => {
                         if can_cycle {
                             let new_src = prev_in(SOURCES, app.source);
                             let new_limit = adjust_limit(app.limit, new_src);
-                            *app = App::new(new_src, new_limit, app.lang);
+                            *app = App::new(new_src, new_limit, app.lang, app.difficulty);
                         }
                     }
                     KeyCode::Down => {
                         if can_cycle {
                             let new_src = next_in(SOURCES, app.source);
                             let new_limit = adjust_limit(app.limit, new_src);
-                            *app = App::new(new_src, new_limit, app.lang);
+                            *app = App::new(new_src, new_limit, app.lang, app.difficulty);
                         }
                     }
                     KeyCode::Left => {
-                        if can_cycle && matches!(app.source, Source::Code) {
-                            app.lang = prev_in(LANGS, app.lang);
-                            *app = App::new(app.source, app.limit, app.lang);
+                        if can_cycle {
+                            match app.source {
+                                Source::Code => app.lang = prev_in(LANGS, app.lang),
+                                Source::Text => {
+                                    app.difficulty = prev_in(DIFFICULTIES, app.difficulty)
+                                }
+                            }
+                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
                         }
                     }
                     KeyCode::Right => {
-                        if can_cycle && matches!(app.source, Source::Code) {
-                            app.lang = next_in(LANGS, app.lang);
-                            *app = App::new(app.source, app.limit, app.lang);
+                        if can_cycle {
+                            match app.source {
+                                Source::Code => app.lang = next_in(LANGS, app.lang),
+                                Source::Text => {
+                                    app.difficulty = next_in(DIFFICULTIES, app.difficulty)
+                                }
+                            }
+                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
                         }
                     }
                     KeyCode::Enter => {
                         if app.finished {
-                            *app = App::new(app.source, app.limit, app.lang);
+                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
                         } else if app.is_code() {
                             app.push('\n');
                         }

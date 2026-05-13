@@ -7,6 +7,14 @@ pub enum Source {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Difficulty {
+    E200,
+    E1k,
+    E5k,
+    E10k,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Lang {
     Rust,
     Python,
@@ -29,10 +37,28 @@ pub struct Cli {
 
     #[arg(short, long, value_enum, default_value_t = Lang::Rust)]
     pub lang: Lang,
+
+    #[arg(short, long, value_enum, default_value_t = Difficulty::E200)]
+    pub difficulty: Difficulty,
 }
 
 pub const SOURCES: &[Source] = &[Source::Text, Source::Code];
 pub const LANGS: &[Lang] = &[Lang::Rust, Lang::Python, Lang::Js, Lang::Go];
+pub const DIFFICULTIES: &[Difficulty] = &[
+    Difficulty::E200,
+    Difficulty::E1k,
+    Difficulty::E5k,
+    Difficulty::E10k,
+];
+
+pub fn difficulty_label(d: Difficulty) -> &'static str {
+    match d {
+        Difficulty::E200 => "200",
+        Difficulty::E1k => "1k",
+        Difficulty::E5k => "5k",
+        Difficulty::E10k => "10k",
+    }
+}
 
 pub const LIMITS_TEXT: &[Limit] = &[
     Limit::Time(15),
