@@ -9,9 +9,7 @@ use ratatui::{
 use crate::app::App;
 use crate::cli::{Mode, Preset, PRESETS};
 
-const LINE_WIDTH: usize = 56;
-const VISIBLE_LINES: usize = 3;
-const BODY_HEIGHT: u16 = (VISIBLE_LINES as u16) * 2 + 1;
+const MAX_LINE_WIDTH: usize = 120;
 
 pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
     let area = f.area();
@@ -19,19 +17,17 @@ pub fn draw(f: &mut Frame, app: &App, preset_idx: usize) {
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Min(0),
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Length(BODY_HEIGHT),
+            Constraint::Min(7),
             Constraint::Length(3),
-            Constraint::Min(0),
         ])
         .split(area);
 
-    draw_header(f, app, chunks[1]);
-    draw_preset_bar(f, preset_idx, app.start.is_some(), chunks[2]);
-    draw_body(f, app, chunks[3]);
-    draw_footer(f, app, chunks[4]);
+    draw_header(f, app, chunks[0]);
+    draw_preset_bar(f, preset_idx, app.start.is_some(), chunks[1]);
+    draw_body(f, app, chunks[2]);
+    draw_footer(f, app, chunks[3]);
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
@@ -86,18 +82,27 @@ fn draw_preset_bar(f: &mut Frame, preset_idx: usize, started: bool, area: Rect) 
 }
 
 fn draw_body(f: &mut Frame, app: &App, area: Rect) {
-    let inner_width = area.width.saturating_sub(2) as usize;
-    let line_width = LINE_WIDTH.min(inner_width.max(20));
+    let inner_width = area.width.saturating_sub(4) as usize;
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let line_width = inner_width.min(MAX_LINE_WIDTH).max(20);
+    let visible_lines = (((inner_height + 1) / 2).max(3)).min(7);
+
     let lines = wrap_lines(&app.target, line_width);
     let cursor = app.typed.len();
     let current_line = find_line(&lines, cursor);
 
-    let half = VISIBLE_LINES / 2;
+    let half = visible_lines / 2;
     let start = current_line.saturating_sub(half);
-    let end = (start + VISIBLE_LINES).min(lines.len());
+    let end = (start + visible_lines).min(lines.len());
     let visible = &lines[start..end];
 
-    let mut rendered: Vec<Line> = Vec::with_capacity(visible.len() * 2);
+    let used = visible.len() * 2 - 1;
+    let top_pad = inner_height.saturating_sub(used) / 2;
+
+    let mut rendered: Vec<Line> = Vec::with_capacity(top_pad + visible.len() * 2);
+    for _ in 0..top_pad {
+        rendered.push(Line::raw(""));
+    }
     for (i, (s, e)) in visible.iter().enumerate() {
         let is_current = start + i == current_line;
         rendered.push(line_for_range(app, *s, *e, is_current, line_width));
@@ -108,7 +113,7 @@ fn draw_body(f: &mut Frame, app: &App, area: Rect) {
 
     let p = Paragraph::new(rendered)
         .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
+        .block(Block::default().borders(Borders::ALL).title(" type "));
     f.render_widget(p, area);
 }
 
