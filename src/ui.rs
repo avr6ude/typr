@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::cli::{amount_label, lang_label, type_label, Mode, PRESETS, TYPES};
+use crate::cli::{amount_label, lang_label, type_label, Mode, PRESETS};
 
 const VISIBLE_LINES: usize = 3;
 const SIDEBAR_WIDTH: u16 = 22;
@@ -66,14 +66,29 @@ fn draw_mode_bar(f: &mut Frame, idx: usize, started: bool, area: Rect) {
         .split(inner);
 
     let current_mode = PRESETS[idx].mode;
+    let sep = Span::styled("  ·  ", Style::default().fg(Color::DarkGray));
+    let divider = Span::styled("   │   ", Style::default().fg(Color::DarkGray));
+
+    let time_presets: Vec<(usize, &crate::cli::Preset)> = PRESETS
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.mode == Mode::Time)
+        .collect();
 
     let mut row1: Vec<Span> = vec![Span::raw(" ")];
-    for (i, t) in TYPES.iter().enumerate() {
-        let selected = *t == current_mode;
-        let style = chip_style(selected, started);
-        row1.push(Span::styled(format!(" {} ", type_label(*t)), style));
-        if i + 1 < TYPES.len() {
-            row1.push(Span::styled("  ·  ", Style::default().fg(Color::DarkGray)));
+    for (j, (gi, p)) in time_presets.iter().enumerate() {
+        let selected = *gi == idx;
+        row1.push(Span::styled(format!(" {} ", amount_label(p)), chip_style(selected, started)));
+        if j + 1 < time_presets.len() {
+            row1.push(sep.clone());
+        }
+    }
+    row1.push(divider.clone());
+    for (j, t) in [Mode::Words, Mode::Code].iter().enumerate() {
+        let selected = current_mode == *t;
+        row1.push(Span::styled(format!(" {} ", type_label(*t)), chip_style(selected, started)));
+        if j + 1 < 2 {
+            row1.push(sep.clone());
         }
     }
     let hint1 = if started {
@@ -84,21 +99,28 @@ fn draw_mode_bar(f: &mut Frame, idx: usize, started: bool, area: Rect) {
     row1.push(Span::styled(hint1, Style::default().fg(Color::DarkGray)));
     f.render_widget(Paragraph::new(Line::from(row1)), inner_rows[0]);
 
-    let group: Vec<(usize, &crate::cli::Preset)> = PRESETS
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| p.mode == current_mode)
-        .collect();
-    let mut row2: Vec<Span> = vec![Span::raw(" ")];
-    for (j, (gi, p)) in group.iter().enumerate() {
-        let selected = *gi == idx;
-        let style = chip_style(selected, started);
-        row2.push(Span::styled(format!(" {} ", amount_label(p)), style));
-        if j + 1 < group.len() {
-            row2.push(Span::styled("  ·  ", Style::default().fg(Color::DarkGray)));
+    if current_mode != Mode::Time {
+        let group: Vec<(usize, &crate::cli::Preset)> = PRESETS
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.mode == current_mode)
+            .collect();
+        let label_prefix = match current_mode {
+            Mode::Words => " words: ",
+            Mode::Code => " code:  ",
+            _ => " ",
+        };
+        let mut row2: Vec<Span> =
+            vec![Span::styled(label_prefix, Style::default().fg(Color::DarkGray))];
+        for (j, (gi, p)) in group.iter().enumerate() {
+            let selected = *gi == idx;
+            row2.push(Span::styled(format!(" {} ", amount_label(p)), chip_style(selected, started)));
+            if j + 1 < group.len() {
+                row2.push(sep.clone());
+            }
         }
+        f.render_widget(Paragraph::new(Line::from(row2)), inner_rows[1]);
     }
-    f.render_widget(Paragraph::new(Line::from(row2)), inner_rows[1]);
 }
 
 fn chip_style(selected: bool, started: bool) -> Style {
