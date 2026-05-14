@@ -1,0 +1,23 @@
+func sortAndPrint(nums []int) {
+    sort.Ints(nums)
+    for i, v := range nums {
+        fmt.Printf("%d: %d\n", i, v)
+    }
+}
+---
+func contains(s []string, target string) bool {
+    for _, v := range s {
+        if v == target {
+            return true
+        }
+    }
+    return false
+}
+---
+type Stack struct {
+    data []int
+}
+
+func (s *Stack) Push(v int) {
+    s.data = append(s.data, v)
+}

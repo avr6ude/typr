@@ -1,3 +1,6 @@
+//! Input dispatch loop. Reads keys, mutates `App`, ticks the clock, and
+//! redraws on every iteration.
+
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -5,22 +8,20 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::Terminal;
 
 use crate::app::App;
-use crate::cli::{
-    limits_for, next_in, prev_in, Limit, Source, DIFFICULTIES, LANGS, SOURCES,
-};
 use crate::ui::draw;
+
+const TICK: Duration = Duration::from_millis(100);
 
 pub fn event_loop<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
 ) -> io::Result<()> {
-    let tick = Duration::from_millis(100);
     let mut last_tick = Instant::now();
 
     loop {
         terminal.draw(|f| draw(f, app))?;
 
-        let timeout = tick.saturating_sub(last_tick.elapsed());
+        let timeout = TICK.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Release {
@@ -31,116 +32,109 @@ pub fn event_loop<B: ratatui::backend::Backend>(
                 {
                     return Ok(());
                 }
-                let suppressed = key.modifiers.intersects(
-                    KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER,
-                );
-                if suppressed && matches!(key.code, KeyCode::Char(_)) {
+                if matches!(key.code, KeyCode::Char(_))
+                    && key
+                        .modifiers
+                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER)
+                {
                     continue;
                 }
-                let can_cycle = app.start.is_none() || app.finished;
-                match key.code {
-                    KeyCode::Esc => {
-                        if app.start.is_some() && !app.finished {
-                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                    KeyCode::Tab => {
-                        if can_cycle {
-                            let limits = limits_for(app.source);
-                            app.limit = next_in(limits, app.limit);
-                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
-                        } else if app.is_code() {
-                            while app.typed.len() < app.target.len() {
-                                let next = app.target[app.typed.len()];
-                                if next == ' ' || next == '\t' {
-                                    app.push(next);
-                                } else {
-                                    break;
-                                }
-                            }
-                        } else {
-                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
-                        }
-                    }
-                    KeyCode::BackTab => {
-                        if can_cycle {
-                            let limits = limits_for(app.source);
-                            app.limit = prev_in(limits, app.limit);
-                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
-                        }
-                    }
-                    KeyCode::Up => {
-                        if can_cycle {
-                            let new_src = prev_in(SOURCES, app.source);
-                            let new_limit = adjust_limit(app.limit, new_src);
-                            *app = App::new(new_src, new_limit, app.lang, app.difficulty);
-                        }
-                    }
-                    KeyCode::Down => {
-                        if can_cycle {
-                            let new_src = next_in(SOURCES, app.source);
-                            let new_limit = adjust_limit(app.limit, new_src);
-                            *app = App::new(new_src, new_limit, app.lang, app.difficulty);
-                        }
-                    }
-                    KeyCode::Left => {
-                        if can_cycle {
-                            match app.source {
-                                Source::Code => app.lang = prev_in(LANGS, app.lang),
-                                Source::Text => {
-                                    app.difficulty = prev_in(DIFFICULTIES, app.difficulty)
-                                }
-                            }
-                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
-                        }
-                    }
-                    KeyCode::Right => {
-                        if can_cycle {
-                            match app.source {
-                                Source::Code => app.lang = next_in(LANGS, app.lang),
-                                Source::Text => {
-                                    app.difficulty = next_in(DIFFICULTIES, app.difficulty)
-                                }
-                            }
-                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
-                        }
-                    }
-                    KeyCode::Enter => {
-                        if app.finished {
-                            *app = App::new(app.source, app.limit, app.lang, app.difficulty);
-                        } else if app.is_code() && app.start.is_some() {
-                            app.push('\n');
-                        }
-                    }
-                    KeyCode::Backspace => {
-                        if !app.finished {
-                            app.backspace();
-                        }
-                    }
-                    KeyCode::Char(c) => {
-                        if !app.finished {
-                            app.push(c);
-                        }
-                    }
-                    _ => {}
+                if handle_key(app, key.code) {
+                    return Ok(());
                 }
             }
         }
 
-        if last_tick.elapsed() >= tick {
+        if last_tick.elapsed() >= TICK {
             app.tick();
             last_tick = Instant::now();
         }
     }
 }
 
-fn adjust_limit(current: Limit, new_source: Source) -> Limit {
-    let allowed = limits_for(new_source);
-    if allowed.contains(&current) {
-        current
-    } else {
-        allowed[0]
+/// Returns `true` if the loop should exit.
+fn handle_key(app: &mut App, code: KeyCode) -> bool {
+    let can_cycle = app.start.is_none() || app.finished;
+    match code {
+        KeyCode::Esc => {
+            if app.start.is_some() && !app.finished {
+                app.restart();
+                false
+            } else {
+                true
+            }
+        }
+        KeyCode::Tab => {
+            if can_cycle {
+                app.cycle_limit_next();
+            } else if app.is_code() {
+                advance_indent(app);
+            } else {
+                app.restart();
+            }
+            false
+        }
+        KeyCode::BackTab => {
+            if can_cycle {
+                app.cycle_limit_prev();
+            }
+            false
+        }
+        KeyCode::Up => {
+            if can_cycle {
+                app.cycle_source_prev();
+            }
+            false
+        }
+        KeyCode::Down => {
+            if can_cycle {
+                app.cycle_source_next();
+            }
+            false
+        }
+        KeyCode::Left => {
+            if can_cycle {
+                app.cycle_secondary_prev();
+            }
+            false
+        }
+        KeyCode::Right => {
+            if can_cycle {
+                app.cycle_secondary_next();
+            }
+            false
+        }
+        KeyCode::Enter => {
+            if app.finished {
+                app.restart();
+            } else if app.is_code() && app.start.is_some() {
+                app.push('\n');
+            }
+            false
+        }
+        KeyCode::Backspace => {
+            if !app.finished {
+                app.backspace();
+            }
+            false
+        }
+        KeyCode::Char(c) => {
+            if !app.finished {
+                app.push(c);
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+fn advance_indent(app: &mut App) {
+    while app.typed.len() < app.target.len() {
+        let next = app.target[app.typed.len()];
+        if next == ' ' || next == '\t' {
+            app.push(next);
+        } else {
+            break;
+        }
     }
 }

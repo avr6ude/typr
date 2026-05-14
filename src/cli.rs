@@ -1,3 +1,6 @@
+//! CLI arguments, config enums (source, lang, limit, difficulty), and small
+//! list-rotation utilities used by the event loop.
+
 use clap::{Parser, ValueEnum};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -22,6 +25,11 @@ pub enum Lang {
     Go,
 }
 
+/// A test-completion condition.
+///
+/// `Time(secs)` ends when the clock runs out, `Count(words)` ends after the
+/// user has typed N whitespace-separated words, `Snippet` ends when the user
+/// types through the entire target.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Limit {
     Time(u32),
@@ -29,8 +37,17 @@ pub enum Limit {
     Snippet,
 }
 
+impl Limit {
+    pub fn time_secs(&self) -> Option<f64> {
+        match self {
+            Limit::Time(n) => Some(f64::from(*n)),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
-#[command(name = "typr", about = "CLI typing test")]
+#[command(name = "typr", about = "CLI typing test", version)]
 pub struct Cli {
     #[arg(short, long, value_enum, default_value_t = Source::Text)]
     pub source: Source,
@@ -40,6 +57,27 @@ pub struct Cli {
 
     #[arg(short, long, value_enum, default_value_t = Difficulty::E200)]
     pub difficulty: Difficulty,
+
+    /// Test limit. Examples: `30s`, `60s`, `25w` (text only), `snippet` (code only).
+    #[arg(short = 'L', long, value_parser = parse_limit, default_value = "30s")]
+    pub limit: Limit,
+}
+
+fn parse_limit(s: &str) -> Result<Limit, String> {
+    let s = s.trim();
+    if s.eq_ignore_ascii_case("snippet") {
+        return Ok(Limit::Snippet);
+    }
+    if let Some(n) = s.strip_suffix('s') {
+        return n.parse::<u32>().map(Limit::Time).map_err(|e| e.to_string());
+    }
+    if let Some(n) = s.strip_suffix('w') {
+        return n
+            .parse::<u32>()
+            .map(Limit::Count)
+            .map_err(|e| e.to_string());
+    }
+    s.parse::<u32>().map(Limit::Time).map_err(|e| e.to_string())
 }
 
 pub const SOURCES: &[Source] = &[Source::Text, Source::Code];
@@ -50,15 +88,6 @@ pub const DIFFICULTIES: &[Difficulty] = &[
     Difficulty::E5k,
     Difficulty::E10k,
 ];
-
-pub fn difficulty_label(d: Difficulty) -> &'static str {
-    match d {
-        Difficulty::E200 => "200",
-        Difficulty::E1k => "1k",
-        Difficulty::E5k => "5k",
-        Difficulty::E10k => "10k",
-    }
-}
 
 pub const LIMITS_TEXT: &[Limit] = &[
     Limit::Time(15),
@@ -102,14 +131,25 @@ pub fn lang_label(l: Lang) -> &'static str {
     }
 }
 
+pub fn difficulty_label(d: Difficulty) -> &'static str {
+    match d {
+        Difficulty::E200 => "200",
+        Difficulty::E1k => "1k",
+        Difficulty::E5k => "5k",
+        Difficulty::E10k => "10k",
+    }
+}
+
 pub fn limit_label(l: Limit) -> String {
     match l {
-        Limit::Time(n) => format!("{}s", n),
-        Limit::Count(n) => format!("{}", n),
+        Limit::Time(n) => format!("{n}s"),
+        Limit::Count(n) => format!("{n}"),
         Limit::Snippet => "snippet".to_string(),
     }
 }
 
+/// Returns the next element in `list` after `current`, wrapping at the end.
+/// If `current` is not in the list, returns the first element.
 pub fn next_in<T: PartialEq + Copy>(list: &[T], current: T) -> T {
     if list.is_empty() {
         return current;
@@ -118,6 +158,8 @@ pub fn next_in<T: PartialEq + Copy>(list: &[T], current: T) -> T {
     list[(pos + 1) % list.len()]
 }
 
+/// Returns the previous element in `list`, wrapping at the start.
+/// If `current` is not in the list, returns the first element.
 pub fn prev_in<T: PartialEq + Copy>(list: &[T], current: T) -> T {
     if list.is_empty() {
         return current;

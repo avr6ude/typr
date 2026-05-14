@@ -1,3 +1,5 @@
+//! Embedded English wordlists (monkeytype) parsed lazily per difficulty.
+
 use std::sync::OnceLock;
 
 use serde::Deserialize;
@@ -20,8 +22,8 @@ static E5K: OnceLock<Vec<String>> = OnceLock::new();
 static E10K: OnceLock<Vec<String>> = OnceLock::new();
 
 const FALLBACK: &[&str] = &[
-    "the", "be", "of", "and", "to", "in", "have", "it", "that", "for", "they", "with", "as",
-    "not", "on", "at", "this", "but", "or", "from",
+    "the", "be", "of", "and", "to", "in", "have", "it", "that", "for", "they", "with", "as", "not",
+    "on", "at", "this", "but", "or", "from",
 ];
 
 fn parse(s: &str) -> Vec<String> {

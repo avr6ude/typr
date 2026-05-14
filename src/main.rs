@@ -1,3 +1,6 @@
+//! Binary entry point: parses CLI, sets up terminal, runs the event loop,
+//! and tears down on exit.
+
 mod app;
 mod cli;
 mod code;
@@ -15,12 +18,12 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::app::App;
-use crate::cli::{Cli, Limit};
+use crate::cli::Cli;
 use crate::event_loop::event_loop;
 
 fn run() -> io::Result<()> {
     let cli = Cli::parse();
-    let mut app = App::new(cli.source, Limit::Time(30), cli.lang, cli.difficulty);
+    let mut app = App::new(cli.source, cli.limit, cli.lang, cli.difficulty);
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();

@@ -1,0 +1,18 @@
+function debounce(fn, delay) {
+    let timer = null;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+---
+const groupBy = (arr, key) => arr.reduce((acc, item) => {
+    (acc[item[key]] = acc[item[key]] || []).push(item);
+    return acc;
+}, {});
+---
+async function fetchUser(id) {
+    const res = await fetch(`/api/users/${id}`);
+    if (!res.ok) throw new Error('not found');
+    return await res.json();
+}
